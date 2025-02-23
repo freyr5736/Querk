@@ -1,3 +1,7 @@
+# Ignore all files without extensions
+*
+!*.*
+
 # Ignore compiled binaries and unknown files
 *.out
 *.o
