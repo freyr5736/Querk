@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/querk.dir/main.cpp.o -o querk 
