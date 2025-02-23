@@ -1,2 +1,2 @@
-# querk
-a custom compiler made using c++
+# Querk
+a Custom Compiler made using c++
