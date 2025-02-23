@@ -1,0 +1,8 @@
+# Ignore build artifacts and executables
+*.out
+*.o
+*.exe
+*.bin
+*.obj
+*.class
+/build/
