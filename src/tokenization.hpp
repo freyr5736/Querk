@@ -28,12 +28,12 @@ class tokenizer {
         std::vector<token> tokens; // Stores all parsed tokens
 
         // Loop while there are characters to process
-        while (peak().has_value()) {
-            if (std::isalpha(peak().value())) { // Check if character is alphabetic
+        while (peek().has_value()) {
+            if (std::isalpha(peek().value())) { // Check if character is alphabetic
                 tkn.push_back(consume());       // Append character and advance position
 
                 // Continue consuming alphanumeric characters
-                while (peak().has_value() && std::isalnum(peak().value())) {
+                while (peek().has_value() && std::isalnum(peek().value())) {
                     tkn.push_back(consume());
                 }
 
@@ -46,21 +46,21 @@ class tokenizer {
                     std::cerr << "Error: Unrecognized token" << std::endl;
                     exit(EXIT_FAILURE);
                 }
-            } else if (std::isdigit(peak().value())) { // Check if character is a digit
+            } else if (std::isdigit(peek().value())) { // Check if character is a digit
                 tkn.push_back(consume());
 
                 // Continue consuming numeric characters
-                while (peak().has_value() && std::isdigit(peak().value())) {
+                while (peek().has_value() && std::isdigit(peek().value())) {
                     tkn.push_back(consume());
                 }
 
                 tokens.push_back({.type = tokentype::int_lit, .value = tkn}); // Store integer token
                 tkn.clear();
-            } else if (peak().value() == ';') { // Check for semicolon
+            } else if (peek().value() == ';') { // Check for semicolon
                 tokens.push_back({.type = tokentype::semi});
                 consume(); // Consume semicolon character
                 continue;
-            } else if (std::isspace(peak().value())) { // Ignore whitespace
+            } else if (std::isspace(peek().value())) { // Ignore whitespace
                 consume();
                 continue;
             } else { // Unrecognized character error
@@ -74,7 +74,7 @@ class tokenizer {
 
   private:
     // Function to peek ahead in the source string without consuming characters
-    [[nodiscard]] inline std::optional<char> peak(int ahead = 0) const {
+    [[nodiscard]] inline std::optional<char> peek(int ahead = 0) const {
         if (m_index + ahead >= m_src.length()) {
             return {}; // Return empty optional if out of bounds
         } else {

@@ -21,7 +21,7 @@ class parser {
     // Function to parse an integer literal expression
     std::optional<node_expr> parse_expr() {
         // Check if the current token is an integer literal
-        if (peak().has_value() && peak().value().type == tokentype::int_lit) {
+        if (peek().has_value() && peek().value().type == tokentype::int_lit) {
             return node_expr{.int_lit = consume()}; // Consume the token and return as node_expr
         } else {
             return {}; // Return empty optional if no valid expression found
@@ -33,9 +33,9 @@ class parser {
         std::optional<node_exit> exit_node;
 
         // Loop while there are tokens to process
-        while (peak().has_value()) {
+        while (peek().has_value()) {
             // Check if the token is an exit keyword
-            if (peak().value().type == tokentype::exit) {
+            if (peek().value().type == tokentype::exit) {
                 consume(); // Consume the exit token
 
                 // Parse the expression following the exit keyword
@@ -47,7 +47,7 @@ class parser {
                 }
 
                 // Ensure the expression is followed by a semicolon
-                if (peak().has_value() && peak().value().type == tokentype::semi) {
+                if (peek().has_value() && peek().value().type == tokentype::semi) {
                     consume();
                 } else {
                     std::cerr << "Error: Missing semicolon" << std::endl;
@@ -66,7 +66,7 @@ class parser {
     size_t m_index = 0;                // Current position in the token list
 
     // Function to peek at the next token without consuming it
-    [[nodiscard]] inline std::optional<token> peak(int ahead = 0) const {
+    [[nodiscard]] inline std::optional<token> peek(int ahead = 0) const {
         if (m_index + ahead >= m_tokens.size()) {
             return {}; // Return empty optional if out of bounds
         } else {
