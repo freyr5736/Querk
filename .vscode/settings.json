@@ -69,5 +69,7 @@
         "variant": "cpp",
         "format": "cpp",
         "__nullptr": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/home/freyr5736/coding/querk/src",
+    "C_Cpp.default.cppStandard": "c++20"
 }

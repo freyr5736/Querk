@@ -56,23 +56,23 @@ int main(int argc, char *argv[]) {
 
     // Parsing process
     parser obj_parser(std::move(tokens));
-    std::optional<node_exit> tree = obj_parser.parse();
+    std::optional<node_program> prog = obj_parser.parse_prog();
 
     // Check if parsing resulted in an exit statement
-    if (!tree.has_value()) {
-        std::cerr << "Error: No exit statement found" << std::endl;
+    if (!prog.has_value()) {
+        std::cerr << "Error: Ivalid Program" << std::endl;
         return EXIT_FAILURE;
     }
 
     // Code generation process
-    generator obj_generator(tree.value());
+    generator obj_generator(prog.value());
     {
         std::fstream file("out.asm", std::ios::out);
         if (!file.is_open()) {
             std::cerr << "Error: Unable to create output file out.asm" << std::endl;
             return EXIT_FAILURE;
         }
-        file << obj_generator.generate();
+        file << obj_generator.generate_program();
     }
 
     // Execute system commands to assemble and link the generated assembly code
