@@ -1,0 +1,539 @@
+/*implemented VARIABLES*/
+==========================================================================================main.cpp==========================================================================================
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <optional>
+#include <vector>
+#include <string>
+
+// Custom header files
+#include "tokenization.hpp"
+#include "parser.hpp"
+#include "generation.hpp"
+
+/*
+=> int main(int argc, char *argv[]) is a standard function signature for the main function, and it is used to pass
+   command-line arguments to the program when it is executed.
+=> argc stands for argument count. It is an integer that indicates the number of command-line arguments passed to the
+   program.
+=> argv stands for argument vector. It is an array of C-style strings (char *), where each element of the array is a
+   command-line argument passed to the program.
+  - argv[0] is the name of the program itself,
+  - argv[1] is the first argument passed by the user.
+=> argc tells you how many arguments were passed while argv gives you access to each argument passed to the program.
+*/
+int main(int argc, char *argv[]) {
+    // Check if exactly one argument (excluding program name) is provided
+    if (argc != 2) {
+        std::cerr << "Invalid Input. Correct syntax: " << std::endl;
+        std::cerr << "quark <input.qrk>" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::string contents;
+    {
+        std::stringstream contents_stream;
+        std::fstream input(argv[1], std::ios::in); // Open file in input mode
+
+        // Check if file opened successfully
+        if (!input.is_open()) {
+            std::cerr << "Error: Unable to open file " << argv[1] << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        /*
+          input.rdbuf() retrieves the underlying buffer of the std::fstream object input, which holds the contents of
+          the file. The << operator is used to copy the entire contents of the file (from input.rdbuf()) into
+          contents_stream. The rdbuf() function returns a pointer to the stream's internal buffer, which allows
+          direct access to the raw data in the file and transfer it into another stream, in this case, contents_stream.
+        */
+        contents_stream << input.rdbuf();
+        contents = contents_stream.str();
+    }
+
+    // Tokenization process
+    tokenizer obj_tokenizer(std::move(contents));
+    std::vector<token> tokens = obj_tokenizer.tokenize();
+
+    // Parsing process
+    parser obj_parser(std::move(tokens));
+    std::optional<node_program> prog = obj_parser.parse_prog();
+
+    // Check if parsing resulted in an exit statement
+    if (!prog.has_value()) {
+        std::cerr << "Error: Ivalid Program" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    // Code generation process
+    generator obj_generator(prog.value());
+    {
+        std::fstream file("out.asm", std::ios::out);
+        if (!file.is_open()) {
+            std::cerr << "Error: Unable to create output file out.asm" << std::endl;
+            return EXIT_FAILURE;
+        }
+        file << obj_generator.generate_program();
+    }
+
+    // Execute system commands to assemble and link the generated assembly code
+    system("rm -f out.o out");                // Remove old output files
+    system("nasm -f elf64 out.asm -o out.o"); // Assemble
+    system("ld -o out out.o");                // Link
+
+    return EXIT_SUCCESS;
+}
+
+
+==========================================================================================tokenization.hpp==========================================================================================
+
+#pragma once // Ensures this header file is processed only once during compilation
+
+#include <string>
+#include <vector>
+#include <optional>
+#include <iostream>
+#include <cctype>
+
+// Enum representing different types of tokens
+enum class tokentype { exit, int_lit, semi, open_paren, close_paren, ident, let, equals };
+
+// Token structure representing a token with its type and optional value
+struct token {
+    tokentype type;                   // Type of the token
+    std::optional<std::string> value; // Optional string value, used only for identifiers and integer literals
+};
+
+class tokenizer {
+  public:
+    // Constructor: Initializes tokenizer with source code string
+    inline tokenizer(std::string src)
+        : m_src(std::move(src)) // Move the input string to avoid unnecessary copying
+    {}
+
+    // Function to tokenize the input source code
+    inline std::vector<token> tokenize() {
+        std::string tkn;           // Stores characters of the current token
+        std::vector<token> tokens; // Stores all parsed tokens
+
+        // Loop while there are characters to process
+        while (peek().has_value()) {
+            if (std::isalpha(peek().value())) { // Check if character is alphabetic
+                tkn.push_back(consume());       // Append character and advance position
+
+                // Continue consuming alphanumeric characters (identifiers or keywords)
+                while (peek().has_value() && std::isalnum(peek().value())) {
+                    tkn.push_back(consume());
+                }
+
+                // Check for keywords
+                if (tkn == "exit") {
+                    tokens.push_back({.type = tokentype::exit}); // Store 'exit' keyword token
+                    tkn.clear();
+                    continue;
+                } else if (tkn == "let") {
+                    tokens.push_back({.type = tokentype::let}); // Store 'let' keyword token
+                    tkn.clear();
+                    continue;
+                } else {
+                    // Store identifier token
+                    tokens.push_back({.type = tokentype::ident, .value = tkn});
+                    tkn.clear();
+                    continue;
+                }
+            } else if (std::isdigit(peek().value())) { // Check if character is a digit (integer literal)
+                tkn.push_back(consume());
+
+                // Continue consuming numeric characters
+                while (peek().has_value() && std::isdigit(peek().value())) {
+                    tkn.push_back(consume());
+                }
+
+                tokens.push_back({.type = tokentype::int_lit, .value = tkn}); // Store integer literal token
+                tkn.clear();
+            }
+
+            // Check for parentheses ( ) and store them as tokens
+            else if (peek().value() == ')') {
+                consume();
+                tokens.push_back({.type = tokentype::close_paren});
+            } else if (peek().value() == '(') {
+                consume();
+                tokens.push_back({.type = tokentype::open_paren});
+            }
+
+            // Check for semicolon (;)
+            else if (peek().value() == ';') {
+                consume();                                   // Consume semicolon character
+                tokens.push_back({.type = tokentype::semi}); // Store semicolon token
+                continue;
+            }
+
+            // Check for equals (=)
+            else if (peek().value() == '=') {
+                consume();                                     // Consume equals character
+                tokens.push_back({.type = tokentype::equals}); // Store equals token
+                continue;
+            }
+
+            // Ignore whitespace (spaces, newlines, tabs)
+            else if (std::isspace(peek().value())) {
+                consume();
+                continue;
+            }
+
+            // Unrecognized character error
+            else {
+                std::cerr << "Error: Unrecognized character '" << peek().value() << "'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        return tokens; // Return the list of parsed tokens
+    }
+
+  private:
+    // Function to peek ahead in the source string without consuming characters
+    [[nodiscard]] inline std::optional<char> peek(int offset = 0) const {
+        if (m_index + offset >= m_src.length()) {
+            return {}; // Return empty optional if out of bounds
+        } else {
+            return m_src.at(m_index + offset); // Return character at current position
+        }
+    }
+
+    // Function to consume a character and move to the next one
+    inline char consume() {
+        return m_src.at(m_index++); // Return current character and increment index
+    }
+
+    const std::string m_src; // Source code string
+    size_t m_index = 0;      // Current position in the source code
+};
+
+
+==========================================================================================parser.hpp==========================================================================================
+
+#pragma once // Ensures this header file is only included once during compilation
+
+#include <variant>  // Allows storing multiple types in a single variable
+#include <vector>   // Used for storing lists of statements
+#include <iostream> // Used for error logging
+#include <optional> // Used to represent optional values that may or may not be present
+
+#include "tokenization.hpp" // Includes the tokenization module for handling tokens
+
+// ============================= NODE STRUCTURES =============================
+
+// Structure representing an integer literal expression node
+// Example: `5` in `exit(5);`
+struct node_expr_int_lit {
+    token int_lit; // Stores an integer literal token
+};
+
+// Structure representing an identifier expression node
+// Example: `x` in `let x = 5;`
+struct node_expr_identifier {
+    token identifier; // Stores an identifier token
+};
+
+// Structure representing a general expression node, which can be:
+// 1. An integer literal (`node_expr_int_lit`)
+// 2. An identifier (`node_expr_identifier`)
+struct node_expr {
+    std::variant<node_expr_int_lit, node_expr_identifier> var; // Variant stores either type
+};
+
+// Structure representing an `exit` statement node
+// Example: `exit(5);`
+struct node_statement_exit {
+    node_expr expr; // Stores the expression inside `exit()`
+};
+
+// Structure representing a `let` statement node
+// Example: `let x = 5;`
+struct node_statement_let {
+    token ident;    // Stores the identifier (`x` in `let x = 5;`)
+    node_expr expr; // Stores the assigned expression (`5` in `let x = 5;`)
+};
+
+// A `node_statement` can be one of the following:
+// 1. `node_statement_exit` (for `exit()` statements)
+// 2. `node_statement_let` (for `let` statements)
+using node_statement = std::variant<node_statement_exit, node_statement_let>;
+
+// Structure representing a complete program containing multiple statements
+struct node_program {
+    std::vector<node_statement> stmts; // Stores a list of statements in the program
+};
+
+// ============================= PARSER CLASS =============================
+
+// The `parser` class is responsible for converting a list of tokens into an Abstract Syntax Tree (AST)
+class parser {
+  public:
+    // Constructor: Initializes the parser with a vector of tokens
+    explicit parser(std::vector<token> tokens) : m_tokens(std::move(tokens)) {}
+
+    // Function to parse an expression (either an integer literal or an identifier)
+    std::optional<node_expr> parse_expr() {
+        // If the next token is an integer literal, parse it as `node_expr_int_lit`
+        if (peek().has_value() && peek().value().type == tokentype::int_lit) {
+            return node_expr{.var = node_expr_int_lit{.int_lit = consume()}};
+        }
+        // If the next token is an identifier, parse it as `node_expr_identifier`
+        else if (peek().has_value() && peek().value().type == tokentype::ident) {
+            return node_expr{.var = node_expr_identifier{.identifier = consume()}};
+        }
+        return {}; // Return empty optional if no valid expression is found
+    }
+
+    // Function to parse a statement (either an `exit` statement or a `let` statement)
+    std::optional<node_statement> parse_statement() {
+        // =================== Handling `exit()` Statements ===================
+        // Example: `exit(5);`
+        if (peek().has_value() && peek().value().type == tokentype::exit && peek(1).has_value() &&
+            peek(1).value().type == tokentype::open_paren) {
+
+            consume(); // Consume 'exit' keyword
+            consume(); // Consume '(' token
+
+            node_statement_exit stmt_exit;
+
+            // Parse the expression inside `exit()`
+            if (auto expr = parse_expr()) {
+                stmt_exit.expr = expr.value();
+            } else {
+                std::cerr << "Error: Invalid expression inside 'exit()'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            // Ensure closing parenthesis `)` exists
+            if (peek().has_value() && peek().value().type == tokentype::close_paren) {
+                consume(); // Consume `)`
+            } else {
+                std::cerr << "Error: Expected ')' after expression in 'exit()'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            // Ensure semicolon `;` exists at the end
+            if (peek().has_value() && peek().value().type == tokentype::semi) {
+                consume(); // Consume `;`
+            } else {
+                std::cerr << "Error: Missing semicolon after 'exit()'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            return stmt_exit; // Return the parsed exit statement
+        }
+
+        // =================== Handling `let` Statements ===================
+        // Example: `let x = 5;`
+        else if (peek().has_value() && peek().value().type == tokentype::let && peek(1).has_value() &&
+                 peek(1).value().type == tokentype::ident && peek(2).has_value() &&
+                 peek(2).value().type == tokentype::equals) {
+
+            consume(); // Consume 'let' keyword
+
+            node_statement_let stmt_let;
+            stmt_let.ident = consume(); // Consume identifier (`x` in `let x = 5;`)
+            consume();                  // Consume '=' token
+
+            // Parse the right-hand expression (`5` in `let x = 5;`)
+            if (auto expr = parse_expr()) {
+                stmt_let.expr = expr.value();
+            } else {
+                std::cerr << "Error: Invalid expression in 'let' statement" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            // Ensure semicolon `;` exists at the end
+            if (peek().has_value() && peek().value().type == tokentype::semi) {
+                consume(); // Consume `;`
+            } else {
+                std::cerr << "Error: Expected ';' after 'let' statement" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            return stmt_let; // Return the parsed let statement
+        }
+
+        return {}; // Return empty optional if no valid statement is found
+    }
+
+    // Function to parse an entire program containing multiple statements
+    std::optional<node_program> parse_prog() {
+        node_program prog; // Create an empty program structure
+
+        // Keep parsing statements until all tokens are consumed
+        while (peek().has_value()) {
+            if (auto stmt = parse_statement()) {
+                prog.stmts.push_back(stmt.value());
+            } else {
+                std::cerr << "Error: Invalid statement in program" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        return prog; // Return the parsed program
+    }
+
+  private:
+    const std::vector<token> m_tokens; // Stores the input tokens
+    size_t m_index = 0;                // Index to track the current position in the token list
+
+    // Function to look ahead at tokens without consuming them
+    [[nodiscard]] std::optional<token> peek(int offset = 0) const {
+        if (m_index + offset >= m_tokens.size())
+            return {}; // Return empty optional if out of bounds
+        return m_tokens.at(m_index + offset);
+    }
+
+    // Function to consume the current token and move to the next one
+    token consume() {
+        return m_tokens.at(m_index++);
+    }
+};
+
+
+==========================================================================================generation.hpp==========================================================================================
+
+#pragma once // Ensures this header file is only included once during compilation
+
+#include "parser.hpp"    // Includes the parser, which provides the AST (Abstract Syntax Tree)
+#include <sstream>       // Used to construct the output assembly as a string
+#include <unordered_map> // Used for storing variables and their stack locations
+
+// ============================= CODE GENERATOR CLASS =============================
+
+// The `generator` class converts the parsed AST into assembly code
+class generator {
+  public:
+    // Constructor: Takes an AST (node_program) as input
+    explicit generator(node_program prog) : m_prog(std::move(prog)) {}
+
+    // ============================= EXPRESSION GENERATION =============================
+
+    // Function to generate assembly code for an expression
+    void generate_expr(const node_expr &expr) {
+        // Define a visitor struct to handle different expression types
+        struct expr_visitor {
+            generator *gen; // Pointer to the generator instance
+
+            // Handles integer literal expressions (e.g., `5` in `exit(5);`)
+            void operator()(const node_expr_int_lit &expr_int_lit) {
+                // Move the integer value into register RAX (used for syscall arguments and computation)
+                gen->m_output << "    mov rax, " << expr_int_lit.int_lit.value.value() << "\n";
+                // Push RAX onto the stack to store the computed value
+                gen->push("rax");
+            }
+
+            // Handles identifier expressions (e.g., `x` in `exit(x);`)
+            void operator()(const node_expr_identifier &expr_identifier) {
+                // Ensure the variable has been declared before using it
+                if (!gen->m_variables.contains(expr_identifier.identifier.value.value())) {
+                    std::cerr << "Error: Undeclared Identifier " << expr_identifier.identifier.value.value()
+                              << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                // Retrieve the variable's stack location
+                const auto &var = gen->m_variables.at(expr_identifier.identifier.value.value());
+
+                // Corrected offset calculation
+                std::stringstream offset;
+                offset << "QWORD [rsp + " << ((gen->m_stack_size - var.stack_loc - 1) * 8)
+                       << "]"; // No subtraction from stack size
+                // Push the variable onto the stack
+                gen->push(offset.str());
+            }
+        };
+
+        expr_visitor visitor{.gen = this}; // Create a visitor instance
+        std::visit(visitor, expr.var);     // Apply visitor pattern to handle the expression
+    }
+
+    // ============================= STATEMENT GENERATION =============================
+
+    // Function to generate assembly code for a statement
+    void generate_statement(const node_statement &stmt) {
+        // Define a visitor struct to handle different statement types
+        struct statement_visitor {
+            generator *gen; // Pointer to the generator instance
+
+            // Handles `exit` statements (e.g., `exit(5);`)
+            void operator()(const node_statement_exit &stmt_exit) {
+                // Generate code for the expression inside `exit()`
+                gen->generate_expr(stmt_exit.expr);
+                // Move the syscall number for exit (60) into RAX
+                gen->m_output << "    mov rax, 60\n";
+                // Pop the expression result from the stack into RDI (exit code argument for syscall)
+                gen->pop("rdi");
+                // Execute the syscall to terminate the program
+                gen->m_output << "    syscall\n";
+            }
+
+            // Handles `let` statements (e.g., `let x = 5;`)
+            void operator()(const node_statement_let &stmt_let) {
+                // Ensure the variable is not already declared
+                if (gen->m_variables.contains(stmt_let.ident.value.value())) {
+                    std::cerr << "Error: Identifier already exists: " << stmt_let.ident.value.value() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                // Store the variable in the symbol table with its stack location
+                gen->m_variables.insert({stmt_let.ident.value.value(), variable{.stack_loc = gen->m_stack_size}});
+                // Generate code for the assigned expression
+                gen->generate_expr(stmt_let.expr);
+            }
+        };
+
+        statement_visitor visitor{.gen = this}; // Create a visitor instance
+        std::visit(visitor, stmt);              // Apply visitor pattern to handle the statement
+    }
+
+    // ============================= PROGRAM GENERATION =============================
+
+    // Function to generate assembly code for the entire program
+    std::string generate_program() {
+        std::stringstream output; // String stream to store generated assembly code
+
+        // Start of the assembly program
+        m_output << "global _start\n"; // Declares the `_start` entry point for the assembler
+        m_output << "_start:\n";       // Defines the `_start` label
+
+        // Generate assembly for each statement in the program
+        for (const node_statement &stmt : m_prog.stmts) {
+            generate_statement(stmt);
+        }
+
+        // Ensure the program exits cleanly in case there is no `exit()` statement
+        m_output << "    mov rax, 60\n"; // Move syscall number for `exit` into RAX
+        m_output << "    mov rdi, 0\n";  // Set exit status to 0 (successful termination)
+        m_output << "    syscall\n";     // Call the `exit` syscall
+
+        return m_output.str(); // Return the generated assembly code as a string
+    }
+
+  private:
+    // Pushes a value onto the stack and updates the stack size
+    void push(const std::string &reg) {
+        m_output << "    push " << reg << "\n";
+        m_stack_size++;
+    }
+
+    // Pops a value from the stack and updates the stack size
+    void pop(const std::string &reg) {
+        m_output << "    pop " << reg << "\n";
+        m_stack_size--;
+    }
+
+    // Structure representing a variable in the symbol table
+    struct variable {
+        size_t stack_loc; // Stack position of the variable
+    };
+
+    const node_program m_prog;                               // Stores the parsed program (AST)
+    std::stringstream m_output;                              // Used to construct the assembly output
+    size_t m_stack_size = 0;                                 // Tracks the current stack size
+    std::unordered_map<std::string, variable> m_variables{}; // Symbol table for variable storage
+};

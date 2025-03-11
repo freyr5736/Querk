@@ -9,7 +9,7 @@
 #include "tokenization.hpp"
 #include "parser.hpp"
 #include "generation.hpp"
-
+#include "storage.hpp"
 /*
 => int main(int argc, char *argv[]) is a standard function signature for the main function, and it is used to pass
    command-line arguments to the program when it is executed.
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
 
     // Parsing process
     parser obj_parser(std::move(tokens));
-    std::optional<node_program> prog = obj_parser.parse_prog();
+    std::optional<node_program *> prog = obj_parser.parse_prog();
 
     // Check if parsing resulted in an exit statement
     if (!prog.has_value()) {
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Code generation process
-    generator obj_generator(prog.value());
+    generator obj_generator(*prog.value());
     {
         std::fstream file("out.asm", std::ios::out);
         if (!file.is_open()) {

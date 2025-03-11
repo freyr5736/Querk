@@ -3,41 +3,34 @@
 #include "parser.hpp"    // Includes the parser, which provides the AST (Abstract Syntax Tree)
 #include <sstream>       // Used to construct the output assembly as a string
 #include <unordered_map> // Used for storing variables and their stack locations
+#include <assert.h>
 
 // ============================= CODE GENERATOR CLASS =============================
 
-// The `generator` class converts the parsed AST into assembly code
+// The generator class converts the parsed AST into assembly code
 class generator {
   public:
     // Constructor: Takes an AST (node_program) as input
     explicit generator(node_program prog) : m_prog(std::move(prog)) {}
 
-    // ============================= EXPRESSION GENERATION =============================
+    void generate_term(const node_term *term) {
+        struct term_visitor {
+            generator *gen;
 
-    // Function to generate assembly code for an expression
-    void generate_expr(const node_expr &expr) {
-        // Define a visitor struct to handle different expression types
-        struct expr_visitor {
-            generator *gen; // Pointer to the generator instance
-
-            // Handles integer literal expressions (e.g., `5` in `exit(5);`)
-            void operator()(const node_expr_int_lit &expr_int_lit) {
+            void operator()(const node_term_int_lit *term_int_lit) const {
                 // Move the integer value into register RAX (used for syscall arguments and computation)
-                gen->m_output << "    mov rax, " << expr_int_lit.int_lit.value.value() << "\n";
+                gen->m_output << "    mov rax, " << term_int_lit->int_lit.value.value() << "\n";
                 // Push RAX onto the stack to store the computed value
                 gen->push("rax");
             }
-
-            // Handles identifier expressions (e.g., `x` in `exit(x);`)
-            void operator()(const node_expr_identifier &expr_identifier) {
+            void operator()(const node_term_identifier *term_ident) const {
                 // Ensure the variable has been declared before using it
-                if (!gen->m_variables.contains(expr_identifier.identifier.value.value())) {
-                    std::cerr << "Error: Undeclared Identifier " << expr_identifier.identifier.value.value()
-                              << std::endl;
+                if (!gen->m_variables.contains(term_ident->identifier.value.value())) {
+                    std::cerr << "Error: Undeclared Identifier " << term_ident->identifier.value.value() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 // Retrieve the variable's stack location
-                const auto &var = gen->m_variables.at(expr_identifier.identifier.value.value());
+                const auto &var = gen->m_variables.at(term_ident->identifier.value.value());
 
                 // Corrected offset calculation
                 std::stringstream offset;
@@ -47,9 +40,35 @@ class generator {
                 gen->push(offset.str());
             }
         };
+        term_visitor visitor({.gen = this});
+        std::visit(visitor, term->var);
+    }
+
+    // ============================= EXPRESSION GENERATION =============================
+
+    // Function to generate assembly code for an expression
+    void generate_expr(const node_expr *expr) {
+        // Define a visitor struct to handle different expression types
+        struct expr_visitor {
+            generator *gen; // Pointer to the generator instance
+
+            void operator()(const node_term *term) const {
+                gen->generate_term(term);
+            }
+
+            // Handles binary expressions (e.g., addition, multiplication)
+            void operator()(const node_binary_expr *bin_expr) {
+                gen->generate_expr(bin_expr->add->lhs);
+                gen->generate_expr(bin_expr->add->rhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                gen->push("rax");
+            }
+        };
 
         expr_visitor visitor{.gen = this}; // Create a visitor instance
-        std::visit(visitor, expr.var);     // Apply visitor pattern to handle the expression
+        std::visit(visitor, expr->var);    // Apply visitor pattern to handle the expression
     }
 
     // ============================= STATEMENT GENERATION =============================
@@ -60,9 +79,9 @@ class generator {
         struct statement_visitor {
             generator *gen; // Pointer to the generator instance
 
-            // Handles `exit` statements (e.g., `exit(5);`)
+            // Handles exit statements (e.g., exit(5);)
             void operator()(const node_statement_exit &stmt_exit) {
-                // Generate code for the expression inside `exit()`
+                // Generate code for the expression inside exit()
                 gen->generate_expr(stmt_exit.expr);
                 // Move the syscall number for exit (60) into RAX
                 gen->m_output << "    mov rax, 60\n";
@@ -72,7 +91,7 @@ class generator {
                 gen->m_output << "    syscall\n";
             }
 
-            // Handles `let` statements (e.g., `let x = 5;`)
+            // Handles let statements (e.g., let x = 5;)
             void operator()(const node_statement_let &stmt_let) {
                 // Ensure the variable is not already declared
                 if (gen->m_variables.contains(stmt_let.ident.value.value())) {
@@ -80,14 +99,16 @@ class generator {
                     exit(EXIT_FAILURE);
                 }
                 // Store the variable in the symbol table with its stack location
-                gen->m_variables.insert({stmt_let.ident.value.value(), variable{.stack_loc = gen->m_stack_size}});
+                auto var = variable{.stack_loc = gen->m_stack_size};
+                gen->m_variables.insert({stmt_let.ident.value.value(), var});
+
                 // Generate code for the assigned expression
                 gen->generate_expr(stmt_let.expr);
             }
         };
 
         statement_visitor visitor{.gen = this}; // Create a visitor instance
-        std::visit(visitor, stmt);              // Apply visitor pattern to handle the statement
+        std::visit(visitor, stmt.var);          // Apply visitor pattern to handle the statement
     }
 
     // ============================= PROGRAM GENERATION =============================
@@ -97,18 +118,18 @@ class generator {
         std::stringstream output; // String stream to store generated assembly code
 
         // Start of the assembly program
-        m_output << "global _start\n"; // Declares the `_start` entry point for the assembler
-        m_output << "_start:\n";       // Defines the `_start` label
+        m_output << "global _start\n"; // Declares the _start entry point for the assembler
+        m_output << "_start:\n";       // Defines the _start label
 
         // Generate assembly for each statement in the program
         for (const node_statement &stmt : m_prog.stmts) {
             generate_statement(stmt);
         }
 
-        // Ensure the program exits cleanly in case there is no `exit()` statement
-        m_output << "    mov rax, 60\n"; // Move syscall number for `exit` into RAX
+        // Ensure the program exits cleanly in case there is no exit() statement
+        m_output << "    mov rax, 60\n"; // Move syscall number for exit into RAX
         m_output << "    mov rdi, 0\n";  // Set exit status to 0 (successful termination)
-        m_output << "    syscall\n";     // Call the `exit` syscall
+        m_output << "    syscall\n";     // Call the exit syscall
 
         return m_output.str(); // Return the generated assembly code as a string
     }

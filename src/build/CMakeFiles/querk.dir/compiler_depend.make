@@ -4,10 +4,12 @@
 CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
   /home/freyr5736/coding/querk/src/generation.hpp \
   /home/freyr5736/coding/querk/src/parser.hpp \
+  /home/freyr5736/coding/querk/src/storage.hpp \
   /home/freyr5736/coding/querk/src/tokenization.hpp \
   /usr/include/alloca.h \
   /usr/include/asm-generic/errno-base.h \
   /usr/include/asm-generic/errno.h \
+  /usr/include/assert.h \
   /usr/include/c++/14/backward/binders.h \
   /usr/include/c++/14/bit \
   /usr/include/c++/14/bits/alloc_traits.h \
@@ -254,10 +256,6 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/x86_64-linux-gnu/bits/wordsize.h:
 
-/usr/include/x86_64-linux-gnu/c++/14/bits/gthr-default.h:
-
-/usr/include/x86_64-linux-gnu/bits/waitflags.h:
-
 /usr/include/x86_64-linux-gnu/bits/typesizes.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/struct_tm.h:
@@ -354,7 +352,7 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/features-time64.h:
 
-/usr/include/c++/14/bits/ranges_cmp.h:
+/usr/include/ctype.h:
 
 /usr/lib/gcc/x86_64-linux-gnu/14/include/stdarg.h:
 
@@ -367,6 +365,10 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 /usr/include/c++/14/bits/memoryfwd.h:
 
 /usr/include/c++/14/bits/postypes.h:
+
+/usr/include/endian.h:
+
+/usr/include/c++/14/bits/localefwd.h:
 
 /usr/include/c++/14/bits/sstream.tcc:
 
@@ -414,6 +416,12 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /home/freyr5736/coding/querk/src/main.cpp:
 
+/usr/include/c++/14/bits/vector.tcc:
+
+/usr/include/c++/14/bits/fstream.tcc:
+
+/usr/include/c++/14/typeinfo:
+
 /usr/include/c++/14/bits/basic_ios.h:
 
 /usr/include/x86_64-linux-gnu/bits/waitstatus.h:
@@ -434,6 +442,22 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/bits/ptr_traits.h:
 
+/usr/include/pthread.h:
+
+/usr/include/c++/14/bits/functexcept.h:
+
+/usr/include/c++/14/cwctype:
+
+/usr/include/x86_64-linux-gnu/c++/14/bits/gthr-default.h:
+
+/usr/include/x86_64-linux-gnu/bits/waitflags.h:
+
+/home/freyr5736/coding/querk/src/storage.hpp:
+
+/usr/include/x86_64-linux-gnu/bits/locale.h:
+
+/usr/include/c++/14/bits/exception_defines.h:
+
 /usr/include/c++/14/bits/allocator.h:
 
 /usr/include/x86_64-linux-gnu/bits/cpu-set.h:
@@ -451,10 +475,6 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 /home/freyr5736/coding/querk/src/parser.hpp:
 
 /usr/include/c++/14/bits/hashtable.h:
-
-/usr/include/c++/14/bits/ranges_util.h:
-
-/usr/include/c++/14/bits/memory_resource.h:
 
 /usr/include/c++/14/bits/cxxabi_forced.h:
 
@@ -478,11 +498,9 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/bits/alloc_traits.h:
 
-/usr/include/pthread.h:
+/usr/include/c++/14/bits/memory_resource.h:
 
-/usr/include/c++/14/bits/functexcept.h:
-
-/usr/include/c++/14/cwctype:
+/usr/include/c++/14/bits/ranges_util.h:
 
 /usr/include/x86_64-linux-gnu/bits/timesize.h:
 
@@ -496,11 +514,9 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/bits/enable_special_members.h:
 
-/usr/include/c++/14/bits/vector.tcc:
+/usr/include/assert.h:
 
-/usr/include/c++/14/bits/fstream.tcc:
-
-/usr/include/c++/14/typeinfo:
+/usr/include/c++/14/cstddef:
 
 /usr/include/c++/14/cctype:
 
@@ -510,13 +526,17 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/concepts:
 
-/usr/include/x86_64-linux-gnu/bits/locale.h:
-
-/usr/include/c++/14/bits/exception_defines.h:
+/usr/include/c++/14/bits/ranges_cmp.h:
 
 /usr/include/c++/14/bits/refwrap.h:
 
 /usr/include/c++/14/exception:
+
+/usr/include/x86_64-linux-gnu/bits/struct_rwlock.h:
+
+/usr/include/c++/14/iostream:
+
+/usr/include/c++/14/bits/requires_hosted.h:
 
 /usr/include/x86_64-linux-gnu/bits/types/error_t.h:
 
@@ -582,8 +602,6 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/compare:
 
-/usr/include/c++/14/cstddef:
-
 /home/freyr5736/coding/querk/src/generation.hpp:
 
 /usr/include/c++/14/cstdio:
@@ -620,15 +638,9 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/iosfwd:
 
-/usr/include/x86_64-linux-gnu/bits/struct_rwlock.h:
-
-/usr/include/c++/14/bits/requires_hosted.h:
-
-/usr/include/c++/14/iostream:
+/usr/include/c++/14/bits/max_size_type.h:
 
 /usr/include/c++/14/ext/aligned_buffer.h:
-
-/usr/include/c++/14/bits/max_size_type.h:
 
 /usr/include/c++/14/new:
 
@@ -648,9 +660,9 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 
 /usr/include/c++/14/sstream:
 
-/usr/include/c++/14/bits/charconv.h:
-
 /usr/include/c++/14/cwchar:
+
+/usr/include/c++/14/bits/charconv.h:
 
 /usr/include/c++/14/stdexcept:
 
@@ -659,9 +671,3 @@ CMakeFiles/querk.dir/main.cpp.o: /home/freyr5736/coding/querk/src/main.cpp \
 /usr/include/c++/14/cstdlib:
 
 /usr/include/c++/14/system_error:
-
-/usr/include/ctype.h:
-
-/usr/include/c++/14/bits/localefwd.h:
-
-/usr/include/endian.h:

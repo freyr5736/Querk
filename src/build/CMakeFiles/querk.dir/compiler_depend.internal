@@ -5,10 +5,12 @@ CMakeFiles/querk.dir/main.cpp.o
  /home/freyr5736/coding/querk/src/main.cpp
  /home/freyr5736/coding/querk/src/generation.hpp
  /home/freyr5736/coding/querk/src/parser.hpp
+ /home/freyr5736/coding/querk/src/storage.hpp
  /home/freyr5736/coding/querk/src/tokenization.hpp
  /usr/include/alloca.h
  /usr/include/asm-generic/errno-base.h
  /usr/include/asm-generic/errno.h
+ /usr/include/assert.h
  /usr/include/c++/14/backward/binders.h
  /usr/include/c++/14/bit
  /usr/include/c++/14/bits/alloc_traits.h

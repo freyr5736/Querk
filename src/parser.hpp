@@ -6,45 +6,63 @@
 #include <optional> // Used to represent optional values that may or may not be present
 
 #include "tokenization.hpp" // Includes the tokenization module for handling tokens
+#include "storage.hpp"
 
 // ============================= NODE STRUCTURES =============================
 
 // Structure representing an integer literal expression node
-// Example: `5` in `exit(5);`
-struct node_expr_int_lit {
+// Example: 5 in exit(5);
+struct node_term_int_lit {
     token int_lit; // Stores an integer literal token
 };
 
 // Structure representing an identifier expression node
-// Example: `x` in `let x = 5;`
-struct node_expr_identifier {
+// Example: x in let x = 5;
+struct node_term_identifier {
     token identifier; // Stores an identifier token
+};
+struct node_expr;
+
+struct node_binary_expr_add {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+struct node_binary_expr {
+    node_binary_expr_add *add;
+};
+
+struct node_term {
+    std::variant<node_term_int_lit *, node_term_identifier *> var;
 };
 
 // Structure representing a general expression node, which can be:
-// 1. An integer literal (`node_expr_int_lit`)
-// 2. An identifier (`node_expr_identifier`)
+// 1. An integer literal (node_expr_int_lit)
+// 2. An identifier (node_expr_identifier)
+// 3. A binary expression (binary_expr)
 struct node_expr {
-    std::variant<node_expr_int_lit, node_expr_identifier> var; // Variant stores either type
+    std::variant<node_term *, node_binary_expr *> var; // Variant stores either type
 };
 
-// Structure representing an `exit` statement node
-// Example: `exit(5);`
+// Structure representing an exit statement node
+// Example: exit(5);
 struct node_statement_exit {
-    node_expr expr; // Stores the expression inside `exit()`
+    node_expr *expr; // Stores the expression inside exit()
 };
 
-// Structure representing a `let` statement node
-// Example: `let x = 5;`
+// Structure representing a let statement node
+// Example: let x = 5;
 struct node_statement_let {
-    token ident;    // Stores the identifier (`x` in `let x = 5;`)
-    node_expr expr; // Stores the assigned expression (`5` in `let x = 5;`)
+    token ident;     // Stores the identifier (x in let x = 5;)
+    node_expr *expr; // Stores the assigned expression (5 in let x = 5;)
 };
 
-// A `node_statement` can be one of the following:
-// 1. `node_statement_exit` (for `exit()` statements)
-// 2. `node_statement_let` (for `let` statements)
-using node_statement = std::variant<node_statement_exit, node_statement_let>;
+// A node_statement can be one of the following:
+// 1. node_statement_exit (for exit() statements)
+// 2. node_statement_let (for let statements)
+struct node_statement {
+    std::variant<node_statement_exit, node_statement_let> var;
+};
 
 // Structure representing a complete program containing multiple statements
 struct node_program {
@@ -53,127 +71,155 @@ struct node_program {
 
 // ============================= PARSER CLASS =============================
 
-// The `parser` class is responsible for converting a list of tokens into an Abstract Syntax Tree (AST)
+// The parser class is responsible for converting a list of tokens into an Abstract Syntax Tree (AST)
 class parser {
   public:
     // Constructor: Initializes the parser with a vector of tokens
-    explicit parser(std::vector<token> tokens) : m_tokens(std::move(tokens)) {}
+    inline explicit parser(std::vector<token> tokens) : m_tokens(std::move(tokens)), m_allocator(1024 * 1024 * 4) {}
 
-    // Function to parse an expression (either an integer literal or an identifier)
-    std::optional<node_expr> parse_expr() {
-        // If the next token is an integer literal, parse it as `node_expr_int_lit`
-        if (peek().has_value() && peek().value().type == tokentype::int_lit) {
-            return node_expr{.var = node_expr_int_lit{.int_lit = consume()}};
+    std::optional<node_binary_expr *> parse_bin_expr() {
+        if (auto lhs = parse_expr()) {
+            // Implementation missing
+        } else {
+            std::cerr << "Error: Operator not supported yet" << std::endl;
+            exit(EXIT_FAILURE);
         }
-        // If the next token is an identifier, parse it as `node_expr_identifier`
-        else if (peek().has_value() && peek().value().type == tokentype::ident) {
-            return node_expr{.var = node_expr_identifier{.identifier = consume()}};
-        }
-        return {}; // Return empty optional if no valid expression is found
+        return {};
     }
 
-    // Function to parse a statement (either an `exit` statement or a `let` statement)
+    std::optional<node_term *> parse_term() {
+        // If the next token is an integer literal, parse it as node_term_int_lit
+        if (auto int_lit = try_consume(tokentype::int_lit)) {
+            auto v_term_int_lit = m_allocator.alloc<node_term_int_lit>();
+            v_term_int_lit->int_lit = int_lit.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = v_term_int_lit;
+            return term;
+        }
+        // If the next token is an identifier, parse it as node_expr_identifier
+        else if (auto ident = try_consume(tokentype::ident)) {
+            auto v_term_ident = m_allocator.alloc<node_term_identifier>();
+            v_term_ident->identifier = ident.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = v_term_ident;
+            return term;
+        }
+        return {};
+    }
+
+    std::optional<node_expr *> parse_expr() {
+        if (auto term = parse_term()) {
+            if (try_consume(tokentype::plus).has_value()) {
+                auto bin_expr = m_allocator.alloc<node_binary_expr>();
+                auto v_bin_expr_add = m_allocator.alloc<node_binary_expr_add>();
+                auto lhs_expr = m_allocator.alloc<node_expr>();
+                lhs_expr->var = term.value();
+                v_bin_expr_add->lhs = lhs_expr;
+
+                if (auto rhs = parse_expr()) {
+                    v_bin_expr_add->rhs = rhs.value();
+                    bin_expr->add = v_bin_expr_add;
+                    auto expr = m_allocator.alloc<node_expr>();
+                    expr->var = bin_expr;
+                    return expr;
+                } else {
+                    std::cerr << "Error: Unexpected Expression" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
+            auto expr = m_allocator.alloc<node_expr>();
+            expr->var = term.value();
+            return expr;
+        } else if (auto bin_expr = parse_bin_expr()) {
+            auto expr = m_allocator.alloc<node_expr>();
+            expr->var = bin_expr.value();
+            return expr;
+        }
+        return {};
+    }
+
     std::optional<node_statement> parse_statement() {
-        // =================== Handling `exit()` Statements ===================
-        // Example: `exit(5);`
-        if (peek().has_value() && peek().value().type == tokentype::exit && peek(1).has_value() &&
-            peek(1).value().type == tokentype::open_paren) {
+        if (peek().has_value() && peek().value().type == tokentype::exit) {
+            try_consume(tokentype::exit, "Error: Expected 'exit' keyword");
+            try_consume(tokentype::open_paren, "Error: Expected '(' after 'exit'");
 
-            consume(); // Consume 'exit' keyword
-            consume(); // Consume '(' token
-
-            node_statement_exit stmt_exit;
-
-            // Parse the expression inside `exit()`
+            auto stmt_exit = m_allocator.alloc<node_statement_exit>();
             if (auto expr = parse_expr()) {
-                stmt_exit.expr = expr.value();
+                stmt_exit->expr = expr.value();
             } else {
                 std::cerr << "Error: Invalid expression inside 'exit()'" << std::endl;
                 exit(EXIT_FAILURE);
             }
-
-            // Ensure closing parenthesis `)` exists
-            if (peek().has_value() && peek().value().type == tokentype::close_paren) {
-                consume(); // Consume `)`
-            } else {
-                std::cerr << "Error: Expected ')' after expression in 'exit()'" << std::endl;
-                exit(EXIT_FAILURE);
-            }
-
-            // Ensure semicolon `;` exists at the end
-            if (peek().has_value() && peek().value().type == tokentype::semi) {
-                consume(); // Consume `;`
-            } else {
-                std::cerr << "Error: Missing semicolon after 'exit()'" << std::endl;
-                exit(EXIT_FAILURE);
-            }
-
-            return stmt_exit; // Return the parsed exit statement
+            try_consume(tokentype::close_paren, "Error: Expected ')' after expression in 'exit()'");
+            try_consume(tokentype::semi, "Error: Missing semicolon after 'exit()'");
+            return node_statement{*stmt_exit};
         }
 
-        // =================== Handling `let` Statements ===================
-        // Example: `let x = 5;`
-        else if (peek().has_value() && peek().value().type == tokentype::let && peek(1).has_value() &&
-                 peek(1).value().type == tokentype::ident && peek(2).has_value() &&
-                 peek(2).value().type == tokentype::equals) {
+        // Handle let statements
+        if (peek().has_value() && peek().value().type == tokentype::let) {
+            try_consume(tokentype::let, "Error: Expected 'let' keyword");
+            auto identifier = try_consume(tokentype::ident, "Error: Expected variable name");
+            try_consume(tokentype::equals, "Error: Expected '=' after variable name");
 
-            consume(); // Consume 'let' keyword
+            auto stmt_let = m_allocator.alloc<node_statement_let>();
+            stmt_let->ident = identifier;
 
-            node_statement_let stmt_let;
-            stmt_let.ident = consume(); // Consume identifier (`x` in `let x = 5;`)
-            consume();                  // Consume '=' token
-
-            // Parse the right-hand expression (`5` in `let x = 5;`)
             if (auto expr = parse_expr()) {
-                stmt_let.expr = expr.value();
+                stmt_let->expr = expr.value();
             } else {
                 std::cerr << "Error: Invalid expression in 'let' statement" << std::endl;
                 exit(EXIT_FAILURE);
             }
 
-            // Ensure semicolon `;` exists at the end
-            if (peek().has_value() && peek().value().type == tokentype::semi) {
-                consume(); // Consume `;`
-            } else {
-                std::cerr << "Error: Expected ';' after 'let' statement" << std::endl;
-                exit(EXIT_FAILURE);
-            }
-
-            return stmt_let; // Return the parsed let statement
+            try_consume(tokentype::semi, "Error: Missing semicolon after 'let' statement");
+            return node_statement{*stmt_let};
         }
 
-        return {}; // Return empty optional if no valid statement is found
+        return {};
     }
 
-    // Function to parse an entire program containing multiple statements
-    std::optional<node_program> parse_prog() {
-        node_program prog; // Create an empty program structure
-
-        // Keep parsing statements until all tokens are consumed
+    std::optional<node_program *> parse_prog() {
+        auto prog = m_allocator.alloc<node_program>();
         while (peek().has_value()) {
             if (auto stmt = parse_statement()) {
-                prog.stmts.push_back(stmt.value());
+                prog->stmts.push_back(stmt.value());
             } else {
                 std::cerr << "Error: Invalid statement in program" << std::endl;
                 exit(EXIT_FAILURE);
             }
         }
-        return prog; // Return the parsed program
+        return prog;
     }
 
   private:
-    const std::vector<token> m_tokens; // Stores the input tokens
-    size_t m_index = 0;                // Index to track the current position in the token list
+    const std::vector<token> m_tokens;
+    size_t m_index = 0;
 
-    // Function to look ahead at tokens without consuming them
     [[nodiscard]] std::optional<token> peek(int offset = 0) const {
         if (m_index + offset >= m_tokens.size())
-            return {}; // Return empty optional if out of bounds
+            return {};
         return m_tokens.at(m_index + offset);
     }
 
-    // Function to consume the current token and move to the next one
     token consume() {
         return m_tokens.at(m_index++);
     }
+
+    inline token try_consume(tokentype type, const std::string &err_msg) {
+        if (peek().has_value() && peek().value().type == type) {
+            return consume();
+        } else {
+            std::cerr << err_msg << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    inline std::optional<token> try_consume(tokentype type) {
+        if (peek().has_value() && peek().value().type == type) {
+            return consume();
+        }
+        return {};
+    }
+
+    storage_allocator m_allocator;
 };

@@ -7,7 +7,7 @@
 #include <cctype>
 
 // Enum representing different types of tokens
-enum class tokentype { exit, int_lit, semi, open_paren, close_paren, ident, let, equals };
+enum class tokentype { exit, int_lit, semi, open_paren, close_paren, ident, let, equals, plus };
 
 // Token structure representing a token with its type and optional value
 struct token {
@@ -84,6 +84,13 @@ class tokenizer {
             else if (peek().value() == '=') {
                 consume();                                     // Consume equals character
                 tokens.push_back({.type = tokentype::equals}); // Store equals token
+                continue;
+            }
+
+            // Check for plus (+)
+            else if (peek().value() == '+') {
+                consume();                                   // Consume plus character
+                tokens.push_back({.type = tokentype::plus}); // Store plus token
                 continue;
             }
 
