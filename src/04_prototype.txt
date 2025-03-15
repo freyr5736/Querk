@@ -1,5 +1,4 @@
-/*implemented ADDITION functionlity*/
-// doesnt calculate negative numbers yet
+/*implemented PRECEDENCE of operators*/
 
 ==========================================================================================storage.hpp==========================================================================================
 #pragma once
@@ -48,7 +47,7 @@ class storage_allocator {
 #include "tokenization.hpp"
 #include "parser.hpp"
 #include "generation.hpp"
-
+#include "storage.hpp"
 /*
 => int main(int argc, char *argv[]) is a standard function signature for the main function, and it is used to pass
    command-line arguments to the program when it is executed.
@@ -95,7 +94,7 @@ int main(int argc, char *argv[]) {
 
     // Parsing process
     parser obj_parser(std::move(tokens));
-    std::optional<node_program> prog = obj_parser.parse_prog();
+    std::optional<node_program *> prog = obj_parser.parse_prog();
 
     // Check if parsing resulted in an exit statement
     if (!prog.has_value()) {
@@ -104,7 +103,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Code generation process
-    generator obj_generator(prog.value());
+    generator obj_generator(*prog.value());
     {
         std::fstream file("out.asm", std::ios::out);
         if (!file.is_open()) {
@@ -124,7 +123,6 @@ int main(int argc, char *argv[]) {
 
 
 ==========================================================================================tokenization.hpp==========================================================================================
-
 #pragma once // Ensures this header file is processed only once during compilation
 
 #include <string>
@@ -134,13 +132,28 @@ int main(int argc, char *argv[]) {
 #include <cctype>
 
 // Enum representing different types of tokens
-enum class tokentype { exit, int_lit, semi, open_paren, close_paren, ident, let, equals, plus };
+enum class tokentype { exit, int_lit, semi, open_paren, close_paren, ident, let, equals, plus, star, minus, div, modu };
 
 // Token structure representing a token with its type and optional value
 struct token {
     tokentype type;                   // Type of the token
     std::optional<std::string> value; // Optional string value, used only for identifiers and integer literals
 };
+
+std::optional<int> binary_precedence(tokentype type) {
+    switch (type) {
+
+    case tokentype::minus:
+    case tokentype::plus:
+        return 0;
+    case tokentype::div:
+    case tokentype::modu:
+    case tokentype::star:
+        return 1;
+    default:
+        return {};
+    }
+}
 
 class tokenizer {
   public:
@@ -150,14 +163,122 @@ class tokenizer {
     {}
 
     // Function to tokenize the input source code
+    // with if-else statements
+    // inline std::vector<token> tokenize() {
+    //     std::string tkn;           // Stores characters of the current token
+    //     std::vector<token> tokens; // Stores all parsed tokens
+
+    //     // Loop while there are characters to process
+    //     while (peek().has_value()) {
+    //         if (std::isalpha(peek().value())) { // Check if character is alphabetic
+    //             tkn.push_back(consume());       // Append character and advance position
+
+    //             // Continue consuming alphanumeric characters (identifiers or keywords)
+    //             while (peek().has_value() && std::isalnum(peek().value())) {
+    //                 tkn.push_back(consume());
+    //             }
+
+    //             // Check for keywords
+    //             if (tkn == "exit") {
+    //                 tokens.push_back({.type = tokentype::exit}); // Store 'exit' keyword token
+    //                 tkn.clear();
+    //             } else if (tkn == "let") {
+    //                 tokens.push_back({.type = tokentype::let}); // Store 'let' keyword token
+    //                 tkn.clear();
+    //             } else {
+    //                 // Store identifier token
+    //                 tokens.push_back({.type = tokentype::ident, .value = tkn});
+    //                 tkn.clear();
+    //             }
+    //         } else if (std::isdigit(peek().value())) { // Check if character is a digit (integer literal)
+    //             tkn.push_back(consume());
+
+    //             // Continue consuming numeric characters
+    //             while (peek().has_value() && std::isdigit(peek().value())) {
+    //                 tkn.push_back(consume());
+    //             }
+
+    //             tokens.push_back({.type = tokentype::int_lit, .value = tkn}); // Store integer literal token
+    //             tkn.clear();
+    //         }
+
+    //         // Check for parentheses ( ) and store them as tokens
+    //         else if (peek().value() == ')') {
+    //             consume();
+    //             tokens.push_back({.type = tokentype::close_paren});
+    //         } else if (peek().value() == '(') {
+    //             consume();
+    //             tokens.push_back({.type = tokentype::open_paren});
+    //         }
+
+    //         // Check for semicolon (;)
+    //         else if (peek().value() == ';') {
+    //             consume();                                   // Consume semicolon character
+    //             tokens.push_back({.type = tokentype::semi}); // Store semicolon token
+    //         }
+
+    //         // Check for equals (=)
+    //         else if (peek().value() == '=') {
+    //             consume();                                     // Consume equals character
+    //             tokens.push_back({.type = tokentype::equals}); // Store equals token
+    //         }
+
+    //         // Check for plus (+)
+    //         else if (peek().value() == '+') {
+    //             consume();                                   // Consume plus character
+    //             tokens.push_back({.type = tokentype::plus}); // Store plus token
+    //         }
+
+    //         // Check for astrisk (*)
+    //         else if (peek().value() == '*') {
+    //             consume();                                   // Consume astrisk character
+    //             tokens.push_back({.type = tokentype::star}); // Store astrisk token
+    //         }
+
+    //         // Check for astrisk (-)
+    //         else if (peek().value() == '-') {
+    //             consume();                                    // Consume minus character
+    //             tokens.push_back({.type = tokentype::minus}); // Store minus token
+    //         }
+
+    //         // Check for astrisk (/)
+    //         else if (peek().value() == '/') {
+    //             consume();                                  // Consume slash character
+    //             tokens.push_back({.type = tokentype::div}); // Store slash token
+    //         }
+
+    //          //Check for modu (%)
+    //         else if (peek().value() == '%') {
+    //             consume();                                    // Consume modulo character
+    //             tokens.push_back({.type = tokentype::modu}); // Store modulo token
+    //         }
+
+    //         // Ignore whitespace (spaces, newlines, tabs)
+    //         else if (std::isspace(peek().value())) {
+    //             consume();
+    //         }
+
+    //         // Unrecognized character error
+    //         else {
+    //             std::cerr << "Error: Unrecognized character '" << peek().value() << "'" << std::endl;
+    //             exit(EXIT_FAILURE);
+    //         }
+    //     }
+
+    //     return tokens; // Return the list of parsed tokens
+    // }
+
+    // Function to tokenize the input source code
     inline std::vector<token> tokenize() {
         std::string tkn;           // Stores characters of the current token
         std::vector<token> tokens; // Stores all parsed tokens
 
         // Loop while there are characters to process
         while (peek().has_value()) {
-            if (std::isalpha(peek().value())) { // Check if character is alphabetic
-                tkn.push_back(consume());       // Append character and advance position
+            char current = peek().value();
+
+            if (std::isalpha(current)) {  // Check if character is alphabetic
+                tkn.push_back(consume()); // Append character and advance position
 
                 // Continue consuming alphanumeric characters (identifiers or keywords)
                 while (peek().has_value() && std::isalnum(peek().value())) {
@@ -165,75 +286,68 @@ class tokenizer {
                 }
 
                 // Check for keywords
-                if (tkn == "exit") {
-                    tokens.push_back({.type = tokentype::exit}); // Store 'exit' keyword token
-                    tkn.clear();
-                    continue;
-                } else if (tkn == "let") {
-                    tokens.push_back({.type = tokentype::let}); // Store 'let' keyword token
-                    tkn.clear();
-                    continue;
+                if (tkn == "exit" || tkn == "let") {
+                    tokens.push_back({.type = (tkn == "exit") ? tokentype::exit : tokentype::let});
                 } else {
-                    // Store identifier token
                     tokens.push_back({.type = tokentype::ident, .value = tkn});
-                    tkn.clear();
-                    continue;
                 }
-            } else if (std::isdigit(peek().value())) { // Check if character is a digit (integer literal)
-                tkn.push_back(consume());
-
-                // Continue consuming numeric characters
-                while (peek().has_value() && std::isdigit(peek().value())) {
-                    tkn.push_back(consume());
-                }
-
-                tokens.push_back({.type = tokentype::int_lit, .value = tkn}); // Store integer literal token
                 tkn.clear();
+                continue;
             }
 
-            // Check for parentheses ( ) and store them as tokens
-            else if (peek().value() == ')') {
+            switch (current) {
+            case ')':
                 consume();
                 tokens.push_back({.type = tokentype::close_paren});
-            } else if (peek().value() == '(') {
+                break;
+            case '(':
                 consume();
                 tokens.push_back({.type = tokentype::open_paren});
-            }
-
-            // Check for semicolon (;)
-            else if (peek().value() == ';') {
-                consume();                                   // Consume semicolon character
-                tokens.push_back({.type = tokentype::semi}); // Store semicolon token
-                continue;
-            }
-
-            // Check for equals (=)
-            else if (peek().value() == '=') {
-                consume();                                     // Consume equals character
-                tokens.push_back({.type = tokentype::equals}); // Store equals token
-                continue;
-            }
-
-            // Check for plus (+)
-            else if (peek().value() == '+') {
-                consume();                                   // Consume plus character
-                tokens.push_back({.type = tokentype::plus}); // Store plus token
-                continue;
-            }
-
-            // Ignore whitespace (spaces, newlines, tabs)
-            else if (std::isspace(peek().value())) {
+                break;
+            case ';':
                 consume();
-                continue;
-            }
-
-            // Unrecognized character error
-            else {
-                std::cerr << "Error: Unrecognized character '" << peek().value() << "'" << std::endl;
-                exit(EXIT_FAILURE);
+                tokens.push_back({.type = tokentype::semi});
+                break;
+            case '=':
+                consume();
+                tokens.push_back({.type = tokentype::equals});
+                break;
+            case '+':
+                consume();
+                tokens.push_back({.type = tokentype::plus});
+                break;
+            case '*':
+                consume();
+                tokens.push_back({.type = tokentype::star});
+                break;
+            case '-':
+                consume();
+                tokens.push_back({.type = tokentype::minus});
+                break;
+            case '/':
+                consume();
+                tokens.push_back({.type = tokentype::div});
+                break;
+            case '%':
+                consume();
+                tokens.push_back({.type = tokentype::modu});
+                break;
+            default:
+                if (std::isdigit(current)) {
+                    tkn.push_back(consume());
+                    while (peek().has_value() && std::isdigit(peek().value())) {
+                        tkn.push_back(consume());
+                    }
+                    tokens.push_back({.type = tokentype::int_lit, .value = tkn});
+                    tkn.clear();
+                } else if (std::isspace(current)) {
+                    consume();
+                } else {
+                    std::cerr << "Error: Unrecognized character '" << current << "'" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
             }
         }
-
         return tokens; // Return the list of parsed tokens
     }
 
@@ -257,7 +371,6 @@ class tokenizer {
 };
 
 
-
 ==========================================================================================parser.hpp==========================================================================================
 
 #pragma once // Ensures this header file is only included once during compilation
@@ -266,11 +379,14 @@ class tokenizer {
 #include <vector>   // Used for storing lists of statements
 #include <iostream> // Used for error logging
 #include <optional> // Used to represent optional values that may or may not be present
+#include <cassert>
 
 #include "tokenization.hpp" // Includes the tokenization module for handling tokens
 #include "storage.hpp"
 
 // ============================= NODE STRUCTURES =============================
+
+struct node_expr;
 
 // Structure representing an integer literal expression node
 // Example: 5 in exit(5);
@@ -283,25 +399,63 @@ struct node_term_int_lit {
 struct node_term_identifier {
     token identifier; // Stores an identifier token
 };
-struct node_expr;
 
+struct node_term_parentheses {
+    node_expr *expr;
+};
+
+// Structure representing addition in binary expression node
+// Example: 5+5 in  let x = 5 + 5;
 struct node_binary_expr_add {
     node_expr *lhs;
     node_expr *rhs;
 };
 
-struct node_binary_expr {
-    node_binary_expr_add *add;
+// Structure representing an multiplication expression node
+// Example: 5*5 in let x = 5*5;
+struct node_binary_expr_multiply {
+    node_expr *lhs;
+    node_expr *rhs;
 };
 
+// Structure representing an subtraction expression node
+// Example: 5-5 in let x = 5-5;
+struct node_binary_expr_minus {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an division expression node
+// Example: 5/5 in let x = 5/5;
+struct node_binary_expr_divide {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an division expression node
+// Example: 5%5 in let x = 5%5;
+struct node_binary_expr_modulus {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an binary expression node
+// Example let x = 5 + 5;
+struct node_binary_expr {
+    std::variant<node_binary_expr_add *, node_binary_expr_multiply *, node_binary_expr_minus *,
+                 node_binary_expr_divide *, node_binary_expr_modulus *>
+        var;
+};
+
+// Structure representing a term
+// Example: let x = 5;
 struct node_term {
-    std::variant<node_term_int_lit *, node_term_identifier *> var;
+    std::variant<node_term_int_lit *, node_term_identifier *, node_term_parentheses *> var;
 };
 
 // Structure representing a general expression node, which can be:
-// 1. An integer literal (node_expr_int_lit)
-// 2. An identifier (node_expr_identifier)
-// 3. A binary expression (binary_expr)
+// 1. A term
+// 2. A binary expression
 struct node_expr {
     std::variant<node_term *, node_binary_expr *> var; // Variant stores either type
 };
@@ -365,39 +519,91 @@ class parser {
             auto term = m_allocator.alloc<node_term>();
             term->var = v_term_ident;
             return term;
+        } else if (auto open_paren = try_consume(tokentype::open_paren)) {
+            auto expr = parse_expr();
+            if (!expr.has_value()) {
+                std::cerr << "Error: Expectec expression" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(tokentype::close_paren, "Error: Expected ')'");
+            auto term_paren = m_allocator.alloc<node_term_parentheses>();
+            term_paren->expr = expr.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = term_paren;
+            return term;
+        } else {
+            return {};
         }
-        return {};
     }
 
-    std::optional<node_expr *> parse_expr() {
-        if (auto term = parse_term()) {
-            if (try_consume(tokentype::plus).has_value()) {
-                auto bin_expr = m_allocator.alloc<node_binary_expr>();
-                auto v_bin_expr_add = m_allocator.alloc<node_binary_expr_add>();
-                auto lhs_expr = m_allocator.alloc<node_expr>();
-                lhs_expr->var = term.value();
-                v_bin_expr_add->lhs = lhs_expr;
-
-                if (auto rhs = parse_expr()) {
-                    v_bin_expr_add->rhs = rhs.value();
-                    bin_expr->add = v_bin_expr_add;
-                    auto expr = m_allocator.alloc<node_expr>();
-                    expr->var = bin_expr;
-                    return expr;
-                } else {
-                    std::cerr << "Error: Unexpected Expression" << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-            }
-            auto expr = m_allocator.alloc<node_expr>();
-            expr->var = term.value();
-            return expr;
-        } else if (auto bin_expr = parse_bin_expr()) {
-            auto expr = m_allocator.alloc<node_expr>();
-            expr->var = bin_expr.value();
-            return expr;
+    std::optional<node_expr *> parse_expr(int min_prec = 0) {
+        std::optional<node_term *> term_lhs = parse_term();
+        if (!term_lhs.has_value()) {
+            return {};
         }
-        return {};
+
+        auto expr_lhs = m_allocator.alloc<node_expr>();
+        expr_lhs->var = term_lhs.value();
+
+        // precedence calculator
+        while (true) {
+            std::optional<token> curr_tkn = peek();
+            std::optional<int> prec;
+            if (curr_tkn.has_value()) {
+                prec = binary_precedence(curr_tkn->type);
+                if (!prec.has_value() || prec < min_prec) {
+                    break;
+                }
+            } else {
+                break;
+            }
+            token op = consume();
+            int v_next_min_prec = prec.value() + 1;
+            auto expr_rhs = parse_expr(v_next_min_prec);
+            if (!expr_rhs.has_value()) {
+                std::cerr << "Eroor: Unable to parse expression" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            auto expr = m_allocator.alloc<node_binary_expr>();
+            auto expr_lhs2 = m_allocator.alloc<node_expr>();
+            if (op.type == tokentype::plus) {
+                auto add = m_allocator.alloc<node_binary_expr_add>();
+                expr_lhs2->var = expr_lhs->var;
+                add->lhs = expr_lhs2;
+                add->rhs = expr_rhs.value();
+                expr->var = add;
+            } else if (op.type == tokentype::star) {
+                auto multi = m_allocator.alloc<node_binary_expr_multiply>();
+                expr_lhs2->var = expr_lhs->var;
+                multi->lhs = expr_lhs2;
+                multi->rhs = expr_rhs.value();
+                expr->var = multi;
+            } else if (op.type == tokentype::minus) {
+                auto minus = m_allocator.alloc<node_binary_expr_minus>();
+                expr_lhs2->var = expr_lhs->var;
+                minus->lhs = expr_lhs2;
+                minus->rhs = expr_rhs.value();
+                expr->var = minus;
+            } else if (op.type == tokentype::div) {
+                auto div = m_allocator.alloc<node_binary_expr_divide>();
+                expr_lhs2->var = expr_lhs->var;
+                div->lhs = expr_lhs2;
+                div->rhs = expr_rhs.value();
+                expr->var = div;
+            } else if (op.type == tokentype::modu) {
+                auto modu = m_allocator.alloc<node_binary_expr_modulus>();
+                expr_lhs2->var = expr_lhs->var;
+                modu->lhs = expr_lhs2;
+                modu->rhs = expr_rhs.value();
+                expr->var = modu;
+            } else {
+                assert(false);
+            }
+            expr_lhs->var = expr;
+        }
+
+        return expr_lhs;
     }
 
     std::optional<node_statement> parse_statement() {
@@ -487,8 +693,8 @@ class parser {
 };
 
 
-==========================================================================================generation.hpp==========================================================================================
 
+==========================================================================================generation.hpp==========================================================================================
 #pragma once // Ensures this header file is only included once during compilation
 
 #include "parser.hpp"    // Includes the parser, which provides the AST (Abstract Syntax Tree)
@@ -503,6 +709,59 @@ class generator {
   public:
     // Constructor: Takes an AST (node_program) as input
     explicit generator(node_program prog) : m_prog(std::move(prog)) {}
+
+    void generate_binary_expr(const node_binary_expr *bin_expr) {
+        struct binary_expr_visitor {
+            generator *gen;
+
+            void operator()(const node_binary_expr_minus *minus) const {
+                gen->generate_expr(minus->rhs);
+                gen->generate_expr(minus->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    sub rax, rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_add *add) const {
+                gen->generate_expr(add->rhs);
+                gen->generate_expr(add->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_multiply *multi) const {
+                gen->generate_expr(multi->rhs);
+                gen->generate_expr(multi->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    mul rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_divide *div) const {
+                gen->generate_expr(div->rhs);
+                gen->generate_expr(div->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    div rbx\n";
+                gen->push("rax");
+            }
+            void operator()(const node_binary_expr_modulus *modu) const {
+                gen->generate_expr(modu->rhs);     // Evaluate RHS first (divisor)
+                gen->generate_expr(modu->lhs);     // Then LHS (dividend)
+                gen->pop("rax");                   // Pop dividend (numerator) into RAX
+                gen->pop("rbx");                   // Pop divisor into RBX
+                gen->m_output << "    cqo\n";      // Sign-extend RAX into RDX:RAX for division
+                gen->m_output << "    idiv rbx\n"; // Perform signed division
+                gen->push("rdx");                  // Push remainder (modulus result) onto the stack
+            }
+        };
+        binary_expr_visitor visitor{.gen = this};
+        std::visit(visitor, bin_expr->var);
+    }
 
     void generate_term(const node_term *term) {
         struct term_visitor {
@@ -530,6 +789,10 @@ class generator {
                 // Push the variable onto the stack
                 gen->push(offset.str());
             }
+
+            void operator()(const node_term_parentheses *term_paren) const {
+                gen->generate_expr(term_paren->expr);
+            }
         };
         term_visitor visitor({.gen = this});
         std::visit(visitor, term->var);
@@ -549,12 +812,7 @@ class generator {
 
             // Handles binary expressions (e.g., addition, multiplication)
             void operator()(const node_binary_expr *bin_expr) {
-                gen->generate_expr(bin_expr->add->lhs);
-                gen->generate_expr(bin_expr->add->rhs);
-                gen->pop("rax");
-                gen->pop("rbx");
-                gen->m_output << "    add rax, rbx\n";
-                gen->push("rax");
+                gen->generate_binary_expr(bin_expr);
             }
         };
 

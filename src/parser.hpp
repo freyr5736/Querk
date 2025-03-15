@@ -4,11 +4,14 @@
 #include <vector>   // Used for storing lists of statements
 #include <iostream> // Used for error logging
 #include <optional> // Used to represent optional values that may or may not be present
+#include <cassert>
 
 #include "tokenization.hpp" // Includes the tokenization module for handling tokens
 #include "storage.hpp"
 
 // ============================= NODE STRUCTURES =============================
+
+struct node_expr;
 
 // Structure representing an integer literal expression node
 // Example: 5 in exit(5);
@@ -21,25 +24,63 @@ struct node_term_int_lit {
 struct node_term_identifier {
     token identifier; // Stores an identifier token
 };
-struct node_expr;
 
+struct node_term_parentheses {
+    node_expr *expr;
+};
+
+// Structure representing addition in binary expression node
+// Example: 5+5 in  let x = 5 + 5;
 struct node_binary_expr_add {
     node_expr *lhs;
     node_expr *rhs;
 };
 
-struct node_binary_expr {
-    node_binary_expr_add *add;
+// Structure representing an multiplication expression node
+// Example: 5*5 in let x = 5*5;
+struct node_binary_expr_multiply {
+    node_expr *lhs;
+    node_expr *rhs;
 };
 
+// Structure representing an subtraction expression node
+// Example: 5-5 in let x = 5-5;
+struct node_binary_expr_minus {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an division expression node
+// Example: 5/5 in let x = 5/5;
+struct node_binary_expr_divide {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an division expression node
+// Example: 5%5 in let x = 5%5;
+struct node_binary_expr_modulus {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an binary expression node
+// Example let x = 5 + 5;
+struct node_binary_expr {
+    std::variant<node_binary_expr_add *, node_binary_expr_multiply *, node_binary_expr_minus *,
+                 node_binary_expr_divide *, node_binary_expr_modulus *>
+        var;
+};
+
+// Structure representing a term
+// Example: let x = 5;
 struct node_term {
-    std::variant<node_term_int_lit *, node_term_identifier *> var;
+    std::variant<node_term_int_lit *, node_term_identifier *, node_term_parentheses *> var;
 };
 
 // Structure representing a general expression node, which can be:
-// 1. An integer literal (node_expr_int_lit)
-// 2. An identifier (node_expr_identifier)
-// 3. A binary expression (binary_expr)
+// 1. A term
+// 2. A binary expression
 struct node_expr {
     std::variant<node_term *, node_binary_expr *> var; // Variant stores either type
 };
@@ -103,39 +144,91 @@ class parser {
             auto term = m_allocator.alloc<node_term>();
             term->var = v_term_ident;
             return term;
+        } else if (auto open_paren = try_consume(tokentype::open_paren)) {
+            auto expr = parse_expr();
+            if (!expr.has_value()) {
+                std::cerr << "Error: Expectec expression" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(tokentype::close_paren, "Error: Expected ')'");
+            auto term_paren = m_allocator.alloc<node_term_parentheses>();
+            term_paren->expr = expr.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = term_paren;
+            return term;
+        } else {
+            return {};
         }
-        return {};
     }
 
-    std::optional<node_expr *> parse_expr() {
-        if (auto term = parse_term()) {
-            if (try_consume(tokentype::plus).has_value()) {
-                auto bin_expr = m_allocator.alloc<node_binary_expr>();
-                auto v_bin_expr_add = m_allocator.alloc<node_binary_expr_add>();
-                auto lhs_expr = m_allocator.alloc<node_expr>();
-                lhs_expr->var = term.value();
-                v_bin_expr_add->lhs = lhs_expr;
-
-                if (auto rhs = parse_expr()) {
-                    v_bin_expr_add->rhs = rhs.value();
-                    bin_expr->add = v_bin_expr_add;
-                    auto expr = m_allocator.alloc<node_expr>();
-                    expr->var = bin_expr;
-                    return expr;
-                } else {
-                    std::cerr << "Error: Unexpected Expression" << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-            }
-            auto expr = m_allocator.alloc<node_expr>();
-            expr->var = term.value();
-            return expr;
-        } else if (auto bin_expr = parse_bin_expr()) {
-            auto expr = m_allocator.alloc<node_expr>();
-            expr->var = bin_expr.value();
-            return expr;
+    std::optional<node_expr *> parse_expr(int min_prec = 0) {
+        std::optional<node_term *> term_lhs = parse_term();
+        if (!term_lhs.has_value()) {
+            return {};
         }
-        return {};
+
+        auto expr_lhs = m_allocator.alloc<node_expr>();
+        expr_lhs->var = term_lhs.value();
+
+        // precedence calculator
+        while (true) {
+            std::optional<token> curr_tkn = peek();
+            std::optional<int> prec;
+            if (curr_tkn.has_value()) {
+                prec = binary_precedence(curr_tkn->type);
+                if (!prec.has_value() || prec < min_prec) {
+                    break;
+                }
+            } else {
+                break;
+            }
+            token op = consume();
+            int v_next_min_prec = prec.value() + 1;
+            auto expr_rhs = parse_expr(v_next_min_prec);
+            if (!expr_rhs.has_value()) {
+                std::cerr << "Eroor: Unable to parse expression" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            auto expr = m_allocator.alloc<node_binary_expr>();
+            auto expr_lhs2 = m_allocator.alloc<node_expr>();
+            if (op.type == tokentype::plus) {
+                auto add = m_allocator.alloc<node_binary_expr_add>();
+                expr_lhs2->var = expr_lhs->var;
+                add->lhs = expr_lhs2;
+                add->rhs = expr_rhs.value();
+                expr->var = add;
+            } else if (op.type == tokentype::star) {
+                auto multi = m_allocator.alloc<node_binary_expr_multiply>();
+                expr_lhs2->var = expr_lhs->var;
+                multi->lhs = expr_lhs2;
+                multi->rhs = expr_rhs.value();
+                expr->var = multi;
+            } else if (op.type == tokentype::minus) {
+                auto minus = m_allocator.alloc<node_binary_expr_minus>();
+                expr_lhs2->var = expr_lhs->var;
+                minus->lhs = expr_lhs2;
+                minus->rhs = expr_rhs.value();
+                expr->var = minus;
+            } else if (op.type == tokentype::div) {
+                auto div = m_allocator.alloc<node_binary_expr_divide>();
+                expr_lhs2->var = expr_lhs->var;
+                div->lhs = expr_lhs2;
+                div->rhs = expr_rhs.value();
+                expr->var = div;
+            } else if (op.type == tokentype::modu) {
+                auto modu = m_allocator.alloc<node_binary_expr_modulus>();
+                expr_lhs2->var = expr_lhs->var;
+                modu->lhs = expr_lhs2;
+                modu->rhs = expr_rhs.value();
+                expr->var = modu;
+            } else {
+                assert(false);
+            }
+            expr_lhs->var = expr;
+        }
+
+        return expr_lhs;
     }
 
     std::optional<node_statement> parse_statement() {

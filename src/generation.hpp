@@ -13,6 +13,59 @@ class generator {
     // Constructor: Takes an AST (node_program) as input
     explicit generator(node_program prog) : m_prog(std::move(prog)) {}
 
+    void generate_binary_expr(const node_binary_expr *bin_expr) {
+        struct binary_expr_visitor {
+            generator *gen;
+
+            void operator()(const node_binary_expr_minus *minus) const {
+                gen->generate_expr(minus->rhs);
+                gen->generate_expr(minus->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    sub rax, rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_add *add) const {
+                gen->generate_expr(add->rhs);
+                gen->generate_expr(add->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_multiply *multi) const {
+                gen->generate_expr(multi->rhs);
+                gen->generate_expr(multi->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    mul rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_divide *div) const {
+                gen->generate_expr(div->rhs);
+                gen->generate_expr(div->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    div rbx\n";
+                gen->push("rax");
+            }
+            void operator()(const node_binary_expr_modulus *modu) const {
+                gen->generate_expr(modu->rhs);     // Evaluate RHS first (divisor)
+                gen->generate_expr(modu->lhs);     // Then LHS (dividend)
+                gen->pop("rax");                   // Pop dividend (numerator) into RAX
+                gen->pop("rbx");                   // Pop divisor into RBX
+                gen->m_output << "    cqo\n";      // Sign-extend RAX into RDX:RAX for division
+                gen->m_output << "    idiv rbx\n"; // Perform signed division
+                gen->push("rdx");                  // Push remainder (modulus result) onto the stack
+            }
+        };
+        binary_expr_visitor visitor{.gen = this};
+        std::visit(visitor, bin_expr->var);
+    }
+
     void generate_term(const node_term *term) {
         struct term_visitor {
             generator *gen;
@@ -39,6 +92,10 @@ class generator {
                 // Push the variable onto the stack
                 gen->push(offset.str());
             }
+
+            void operator()(const node_term_parentheses *term_paren) const {
+                gen->generate_expr(term_paren->expr);
+            }
         };
         term_visitor visitor({.gen = this});
         std::visit(visitor, term->var);
@@ -58,12 +115,7 @@ class generator {
 
             // Handles binary expressions (e.g., addition, multiplication)
             void operator()(const node_binary_expr *bin_expr) {
-                gen->generate_expr(bin_expr->add->lhs);
-                gen->generate_expr(bin_expr->add->rhs);
-                gen->pop("rax");
-                gen->pop("rbx");
-                gen->m_output << "    add rax, rbx\n";
-                gen->push("rax");
+                gen->generate_binary_expr(bin_expr);
             }
         };
 
