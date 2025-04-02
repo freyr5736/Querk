@@ -1,0 +1,937 @@
+/*implemented SCOPES and IF()*/
+
+==========================================================================================storage.hpp==========================================================================================
+#pragma once
+
+#include <cstdlib> // For malloc and free
+#include <cstddef> // For std::byte
+#include <new>     // For placement new
+
+class storage_allocator {
+  public:
+    inline explicit storage_allocator(size_t bytes) : m_size(bytes) {
+        m_buffer = reinterpret_cast<std::byte *>(malloc(m_size));
+        m_offset = m_buffer;
+    }
+
+    template <typename T> inline T *alloc() {
+        void *offset = m_offset;
+        m_offset += sizeof(T);
+        return reinterpret_cast<T *>(offset);
+    }
+
+    inline storage_allocator(const storage_allocator &) = delete;
+    inline storage_allocator &operator=(const storage_allocator &) = delete;
+
+    inline ~storage_allocator() {
+        free(m_buffer);
+    }
+
+  private:
+    size_t m_size;
+    std::byte *m_buffer;
+    std::byte *m_offset;
+};
+
+==========================================================================================main.cpp==========================================================================================
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <optional>
+#include <vector>
+#include <string>
+
+// Custom header files
+#include "tokenization.hpp"
+#include "parser.hpp"
+#include "generation.hpp"
+#include "storage.hpp"
+/*
+=> int main(int argc, char *argv[]) is a standard function signature for the main function, and it is used to pass
+   command-line arguments to the program when it is executed.
+=> argc stands for argument count. It is an integer that indicates the number of command-line arguments passed to the
+   program.
+=> argv stands for argument vector. It is an array of C-style strings (char *), where each element of the array is a
+   command-line argument passed to the program.
+  - argv[0] is the name of the program itself,
+  - argv[1] is the first argument passed by the user.
+=> argc tells you how many arguments were passed while argv gives you access to each argument passed to the program.
+*/
+int main(int argc, char *argv[]) {
+    // Check if exactly one argument (excluding program name) is provided
+    if (argc != 2) {
+        std::cerr << "Invalid Input. Correct syntax: " << std::endl;
+        std::cerr << "quark <input.qrk>" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::string contents;
+    {
+        std::stringstream contents_stream;
+        std::fstream input(argv[1], std::ios::in); // Open file in input mode
+
+        // Check if file opened successfully
+        if (!input.is_open()) {
+            std::cerr << "Error: Unable to open file " << argv[1] << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        /*
+          input.rdbuf() retrieves the underlying buffer of the std::fstream object input, which holds the contents of
+          the file. The << operator is used to copy the entire contents of the file (from input.rdbuf()) into
+          contents_stream. The rdbuf() function returns a pointer to the stream's internal buffer, which allows
+          direct access to the raw data in the file and transfer it into another stream, in this case, contents_stream.
+        */
+        contents_stream << input.rdbuf();
+        contents = contents_stream.str();
+    }
+
+    // Tokenization process
+    tokenizer obj_tokenizer(std::move(contents));
+    std::vector<token> tokens = obj_tokenizer.tokenize();
+
+    // Parsing process
+    parser obj_parser(std::move(tokens));
+    std::optional<node_program *> prog = obj_parser.parse_prog();
+
+    // Check if parsing resulted in an exit statement
+    if (!prog.has_value()) {
+        std::cerr << "Error: Ivalid Program" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    // Code generation process
+    generator obj_generator(*prog.value());
+    {
+        std::fstream file("out.asm", std::ios::out);
+        if (!file.is_open()) {
+            std::cerr << "Error: Unable to create output file out.asm" << std::endl;
+            return EXIT_FAILURE;
+        }
+        file << obj_generator.generate_program();
+    }
+
+    // Execute system commands to assemble and link the generated assembly code
+    system("rm -f out.o out");                // Remove old output files
+    system("nasm -f elf64 out.asm -o out.o"); // Assemble
+    system("ld -o out out.o");                // Link
+
+    return EXIT_SUCCESS;
+}
+
+==========================================================================================tokenization.hpp==========================================================================================
+
+#pragma once // Ensures this header file is processed only once during compilation
+
+#include <string>
+#include <vector>
+#include <optional>
+#include <iostream>
+#include <cctype>
+
+// Enum representing different types of tokens
+enum class tokentype {
+    exit,
+    int_lit,
+    semi,
+    open_paren,
+    close_paren,
+    ident,
+    let,
+    equals,
+    plus,
+    star,
+    minus,
+    div,
+    modu,
+    open_curly,
+    close_curly,
+    if_
+};
+
+// Token structure representing a token with its type and optional value
+struct token {
+    tokentype type;                   // Type of the token
+    std::optional<std::string> value; // Optional string value, used only for identifiers and integer literals
+};
+
+std::optional<int> binary_precedence(tokentype type) {
+    switch (type) {
+
+    case tokentype::minus:
+    case tokentype::plus:
+        return 0;
+    case tokentype::div:
+    case tokentype::modu:
+    case tokentype::star:
+        return 1;
+    default:
+        return {};
+    }
+}
+
+class tokenizer {
+  public:
+    // Constructor: Initializes tokenizer with source code string
+    inline tokenizer(std::string src)
+        : m_src(std::move(src)) // Move the input string to avoid unnecessary copying
+    {}
+
+    // Function to tokenize the input source code
+    inline std::vector<token> tokenize() {
+        std::string tkn;           // Stores characters of the current token
+        std::vector<token> tokens; // Stores all parsed tokens
+
+        // Loop while there are characters to process
+        while (peek().has_value()) {
+            char current = peek().value();
+
+            if (std::isalpha(current)) {  // Check if character is alphabetic
+                tkn.push_back(consume()); // Append character and advance position
+
+                // Continue consuming alphanumeric characters (identifiers or keywords)
+                while (peek().has_value() && std::isalnum(peek().value())) {
+                    tkn.push_back(consume());
+                }
+
+                // Check for keywords
+                if (tkn == "exit" || tkn == "let") {
+                    tokens.push_back({.type = (tkn == "exit") ? tokentype::exit : tokentype::let});
+                } else if (tkn == "if") {
+                    tokens.push_back({.type = tokentype::if_});
+                    tkn.clear();
+                }
+
+                else {
+                    tokens.push_back({.type = tokentype::ident, .value = tkn});
+                }
+                tkn.clear();
+                continue;
+            }
+
+            switch (current) {
+            case ')':
+                consume();
+                tokens.push_back({.type = tokentype::close_paren});
+                break;
+            case '(':
+                consume();
+                tokens.push_back({.type = tokentype::open_paren});
+                break;
+            case ';':
+                consume();
+                tokens.push_back({.type = tokentype::semi});
+                break;
+            case '=':
+                consume();
+                tokens.push_back({.type = tokentype::equals});
+                break;
+            case '+':
+                consume();
+                tokens.push_back({.type = tokentype::plus});
+                break;
+            case '*':
+                consume();
+                tokens.push_back({.type = tokentype::star});
+                break;
+            case '-':
+                consume();
+                tokens.push_back({.type = tokentype::minus});
+                break;
+            case '/':
+                consume();
+                tokens.push_back({.type = tokentype::div});
+                break;
+            case '%':
+                consume();
+                tokens.push_back({.type = tokentype::modu});
+                break;
+            case '{':
+                consume();
+                tokens.push_back({.type = tokentype::open_curly});
+                break;
+            case '}':
+                consume();
+                tokens.push_back({.type = tokentype::close_curly});
+                break;
+            default:
+                if (std::isdigit(current)) {
+                    tkn.push_back(consume());
+                    while (peek().has_value() && std::isdigit(peek().value())) {
+                        tkn.push_back(consume());
+                    }
+                    tokens.push_back({.type = tokentype::int_lit, .value = tkn});
+                    tkn.clear();
+                } else if (std::isspace(current)) {
+                    consume();
+                } else {
+                    std::cerr << "Error: Unrecognized character '" << current << "'" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+            }
+        }
+        return tokens; // Return the list of parsed tokens
+    }
+
+  private:
+    // Function to peek ahead in the source string without consuming characters
+    [[nodiscard]] inline std::optional<char> peek(int offset = 0) const {
+        if (m_index + offset >= m_src.length()) {
+            return {}; // Return empty optional if out of bounds
+        } else {
+            return m_src.at(m_index + offset); // Return character at current position
+        }
+    }
+
+    // Function to consume a character and move to the next one
+    inline char consume() {
+        return m_src.at(m_index++); // Return current character and increment index
+    }
+
+    const std::string m_src; // Source code string
+    size_t m_index = 0;      // Current position in the source code
+};
+
+
+==========================================================================================parser.hpp==========================================================================================
+
+#pragma once // Ensures this header file is only included once during compilation
+
+#include <variant>  // Allows storing multiple types in a single variable
+#include <vector>   // Used for storing lists of statements
+#include <iostream> // Used for error logging
+#include <optional> // Used to represent optional values that may or may not be present
+#include <cassert>
+
+#include "tokenization.hpp" // Includes the tokenization module for handling tokens
+#include "storage.hpp"
+
+// ============================= NODE STRUCTURES =============================
+
+struct node_expr;
+
+// Structure representing an integer literal expression node
+// Example: 5 in exit(5);
+struct node_term_int_lit {
+    token int_lit; // Stores an integer literal token
+};
+
+// Structure representing an identifier expression node
+// Example: x in let x = 5;
+struct node_term_identifier {
+    token identifier; // Stores an identifier token
+};
+
+struct node_term_parentheses {
+    node_expr *expr;
+};
+
+// Structure representing addition in binary expression node
+// Example: 5+5 in  let x = 5 + 5;
+struct node_binary_expr_add {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an multiplication expression node
+// Example: 5*5 in let x = 5*5;
+struct node_binary_expr_multiply {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an subtraction expression node
+// Example: 5-5 in let x = 5-5;
+struct node_binary_expr_minus {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an division expression node
+// Example: 5/5 in let x = 5/5;
+struct node_binary_expr_divide {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an division expression node
+// Example: 5%5 in let x = 5%5;
+struct node_binary_expr_modulus {
+    node_expr *lhs;
+    node_expr *rhs;
+};
+
+// Structure representing an binary expression node
+// Example let x = 5 + 5;
+struct node_binary_expr {
+    std::variant<node_binary_expr_add *, node_binary_expr_multiply *, node_binary_expr_minus *,
+                 node_binary_expr_divide *, node_binary_expr_modulus *>
+        var;
+};
+
+// Structure representing a term
+// Example: let x = 5;
+struct node_term {
+    std::variant<node_term_int_lit *, node_term_identifier *, node_term_parentheses *> var;
+};
+
+// Structure representing a general expression node, which can be:
+// 1. A term
+// 2. A binary expression
+struct node_expr {
+    std::variant<node_term *, node_binary_expr *> var; // Variant stores either type
+};
+
+// Structure representing an exit statement node
+// Example: exit(5);
+struct node_statement_exit {
+    node_expr *expr; // Stores the expression inside exit()
+};
+
+// Structure representing a let statement node
+// Example: let x = 5;
+struct node_statement_let {
+    token ident;     // Stores the identifier (x in let x = 5;)
+    node_expr *expr; // Stores the assigned expression (5 in let x = 5;)
+};
+
+struct node_statement;
+
+struct node_scope {
+    std::vector<node_statement *> stmts;
+};
+
+struct node_statement_if {
+    node_expr *expr;
+    node_scope *scope;
+};
+
+// A node_statement can be one of the following:
+// 1. node_statement_exit (for exit() statements)
+// 2. node_statement_let (for let statements)
+struct node_statement {
+    std::variant<node_statement_exit, node_statement_let, node_scope *, node_statement_if *> var;
+};
+
+// Structure representing a complete program containing multiple statements
+struct node_program {
+    std::vector<node_statement> stmts; // Stores a list of statements in the program
+};
+
+// ============================= PARSER CLASS =============================
+
+// The parser class is responsible for converting a list of tokens into an Abstract Syntax Tree (AST)
+class parser {
+  public:
+    // Constructor: Initializes the parser with a vector of tokens
+    inline explicit parser(std::vector<token> tokens) : m_tokens(std::move(tokens)), m_allocator(1024 * 1024 * 4) {}
+
+    std::optional<node_binary_expr *> parse_bin_expr() {
+        if (auto lhs = parse_expr()) {
+            // Implementation missing
+        } else {
+            std::cerr << "Error: Operator not supported yet" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        return {};
+    }
+
+    std::optional<node_term *> parse_term() {
+        // If the next token is an integer literal, parse it as node_term_int_lit
+        if (auto int_lit = try_consume(tokentype::int_lit)) {
+            auto v_term_int_lit = m_allocator.alloc<node_term_int_lit>();
+            v_term_int_lit->int_lit = int_lit.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = v_term_int_lit;
+            return term;
+        }
+        // If the next token is an identifier, parse it as node_expr_identifier
+        else if (auto ident = try_consume(tokentype::ident)) {
+            auto v_term_ident = m_allocator.alloc<node_term_identifier>();
+            v_term_ident->identifier = ident.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = v_term_ident;
+            return term;
+        } else if (auto open_paren = try_consume(tokentype::open_paren)) {
+            auto expr = parse_expr();
+            if (!expr.has_value()) {
+                std::cerr << "Error: Expected expression" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(tokentype::close_paren, "Error: Expected ')'");
+            auto term_paren = m_allocator.alloc<node_term_parentheses>();
+            term_paren->expr = expr.value();
+            auto term = m_allocator.alloc<node_term>();
+            term->var = term_paren;
+            return term;
+        } else {
+            return {};
+        }
+    }
+
+    std::optional<node_expr *> parse_expr(int min_prec = 0) {
+        std::optional<node_term *> term_lhs = parse_term();
+        if (!term_lhs.has_value()) {
+            return {};
+        }
+
+        auto expr_lhs = m_allocator.alloc<node_expr>();
+        expr_lhs->var = term_lhs.value();
+
+        // precedence calculator
+        while (true) {
+            std::optional<token> curr_tkn = peek();
+            std::optional<int> prec;
+            if (curr_tkn.has_value()) {
+                prec = binary_precedence(curr_tkn->type);
+                if (!prec.has_value() || prec.value() < min_prec) {
+                    break;
+                }
+            } else {
+                break;
+            }
+            token op = consume();
+            int v_next_min_prec = prec.value() + 1;
+            auto expr_rhs = parse_expr(v_next_min_prec);
+            if (!expr_rhs.has_value()) {
+                std::cerr << "Error: Unable to parse expression" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            auto expr = m_allocator.alloc<node_binary_expr>();
+            auto expr_lhs2 = m_allocator.alloc<node_expr>();
+            if (op.type == tokentype::plus) {
+                auto add = m_allocator.alloc<node_binary_expr_add>();
+                expr_lhs2->var = expr_lhs->var;
+                add->lhs = expr_lhs2;
+                add->rhs = expr_rhs.value();
+                expr->var = add;
+            } else if (op.type == tokentype::star) {
+                auto multi = m_allocator.alloc<node_binary_expr_multiply>();
+                expr_lhs2->var = expr_lhs->var;
+                multi->lhs = expr_lhs2;
+                multi->rhs = expr_rhs.value();
+                expr->var = multi;
+            } else if (op.type == tokentype::minus) {
+                auto minus = m_allocator.alloc<node_binary_expr_minus>();
+                expr_lhs2->var = expr_lhs->var;
+                minus->lhs = expr_lhs2;
+                minus->rhs = expr_rhs.value();
+                expr->var = minus;
+            } else if (op.type == tokentype::div) {
+                auto div = m_allocator.alloc<node_binary_expr_divide>();
+                expr_lhs2->var = expr_lhs->var;
+                div->lhs = expr_lhs2;
+                div->rhs = expr_rhs.value();
+                expr->var = div;
+            } else if (op.type == tokentype::modu) {
+                auto modu = m_allocator.alloc<node_binary_expr_modulus>();
+                expr_lhs2->var = expr_lhs->var;
+                modu->lhs = expr_lhs2;
+                modu->rhs = expr_rhs.value();
+                expr->var = modu;
+            } else {
+                assert(false);
+            }
+            expr_lhs->var = expr;
+        }
+
+        return expr_lhs;
+    }
+
+    std::optional<node_scope *> parse_scope() {
+        if (!try_consume(tokentype::open_curly).has_value()) {
+            return {};
+        }
+        auto scope = m_allocator.alloc<node_scope>();
+        while (auto stmt = parse_statement()) {
+            scope->stmts.push_back(stmt.value());
+        }
+        try_consume(tokentype::close_curly, "Error: Expected '}'");
+        return scope;
+    }
+
+    std::optional<node_statement *> parse_statement() {
+        if (peek().has_value() && peek().value().type == tokentype::exit) {
+            try_consume(tokentype::exit, "Error: Expected 'exit' keyword");
+            try_consume(tokentype::open_paren, "Error: Expected '(' after 'exit'");
+
+            auto stmt_exit = m_allocator.alloc<node_statement_exit>();
+            if (auto expr = parse_expr()) {
+                stmt_exit->expr = expr.value();
+            } else {
+                std::cerr << "Error: Invalid expression inside 'exit()'" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(tokentype::close_paren, "Error: Expected ')' after expression in 'exit()'");
+            try_consume(tokentype::semi, "Error: Missing semicolon after 'exit()'");
+            auto stmt = m_allocator.alloc<node_statement>();
+            stmt->var = *stmt_exit;
+            return stmt;
+        }
+
+        // Handle let statements
+        if (peek().has_value() && peek().value().type == tokentype::let) {
+            try_consume(tokentype::let, "Error: Expected 'let' keyword");
+            auto identifier = try_consume(tokentype::ident, "Error: Expected variable name");
+            try_consume(tokentype::equals, "Error: Expected '=' after variable name");
+
+            auto stmt_let = m_allocator.alloc<node_statement_let>();
+            stmt_let->ident = identifier;
+
+            if (auto expr = parse_expr()) {
+                stmt_let->expr = expr.value();
+            } else {
+                std::cerr << "Error: Invalid expression in 'let' statement" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            try_consume(tokentype::semi, "Error: Missing semicolon after 'let' statement");
+            auto stmt = m_allocator.alloc<node_statement>();
+            stmt->var = *stmt_let;
+            return stmt;
+        } else if (peek().has_value() && peek().value().type == tokentype::open_curly) {
+            if (auto scope = parse_scope()) {
+                auto stmt = m_allocator.alloc<node_statement>();
+                stmt->var = scope.value();
+                return stmt;
+            } else {
+                std::cerr << "Error: Invalid scope" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+        } else if (auto if_ = try_consume(tokentype::if_)) {
+            try_consume(tokentype::open_paren, "Error: Expected'('");
+            auto stmt_if = m_allocator.alloc<node_statement_if>();
+            if (auto expr = parse_expr()) {
+                stmt_if->expr = expr.value();
+            } else {
+                std::cerr << "Error: Invalid expression in 'let' statement" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(tokentype::close_paren, "Error: Expected')'");
+            if (auto scope = parse_scope()) {
+                stmt_if->scope = scope.value();
+            } else {
+                std::cerr << "Error: Invalid scope" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto stmt = m_allocator.alloc<node_statement>();
+            stmt->var = stmt_if;
+            return stmt;
+        }
+
+        return {};
+    }
+
+    std::optional<node_program *> parse_prog() {
+        auto prog = m_allocator.alloc<node_program>();
+        while (peek().has_value()) {
+            if (auto stmt = parse_statement()) {
+                prog->stmts.push_back(*stmt.value());
+            } else {
+                std::cerr << "Error: Invalid statement in program" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+        }
+        return prog;
+    }
+
+  private:
+    const std::vector<token> m_tokens;
+    size_t m_index = 0;
+
+    [[nodiscard]] std::optional<token> peek(int offset = 0) const {
+        if (m_index + offset >= m_tokens.size())
+            return {};
+        return m_tokens.at(m_index + offset);
+    }
+
+    token consume() {
+        return m_tokens.at(m_index++);
+    }
+
+    inline token try_consume(tokentype type, const std::string &err_msg) {
+        if (peek().has_value() && peek().value().type == type) {
+            return consume();
+        } else {
+            std::cerr << err_msg << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    inline std::optional<token> try_consume(tokentype type) {
+        if (peek().has_value() && peek().value().type == type) {
+            return consume();
+        }
+        return {};
+    }
+
+    storage_allocator m_allocator;
+};
+
+==========================================================================================generation.hpp==========================================================================================
+
+#pragma once // Ensures this header file is only included once during compilation
+
+#include "parser.hpp" // Includes the parser, which provides the AST (Abstract Syntax Tree)
+#include <sstream>    // Used to construct the output assembly as a string
+#include <vector>     // Used for storing variables and their stack locations
+#include <assert.h>
+#include <algorithm>
+
+// ============================= CODE GENERATOR CLASS =============================
+
+// The generator class converts the parsed AST into assembly code
+class generator {
+  public:
+    // Constructor: Takes an AST (node_program) as input
+    explicit generator(node_program prog) : m_prog(std::move(prog)) {}
+
+    void generate_binary_expr(const node_binary_expr *bin_expr) {
+        struct binary_expr_visitor {
+            generator *gen;
+
+            void operator()(const node_binary_expr_minus *minus) const {
+                gen->generate_expr(minus->rhs);
+                gen->generate_expr(minus->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    sub rax, rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_add *add) const {
+                gen->generate_expr(add->rhs);
+                gen->generate_expr(add->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_multiply *multi) const {
+                gen->generate_expr(multi->rhs);
+                gen->generate_expr(multi->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    mul rbx\n";
+                gen->push("rax");
+            }
+
+            void operator()(const node_binary_expr_divide *div) const {
+                gen->generate_expr(div->rhs);
+                gen->generate_expr(div->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    div rbx\n";
+                gen->push("rax");
+            }
+            void operator()(const node_binary_expr_modulus *modu) const {
+                gen->generate_expr(modu->rhs);     // Evaluate RHS first (divisor)
+                gen->generate_expr(modu->lhs);     // Then LHS (dividend)
+                gen->pop("rax");                   // Pop dividend (numerator) into RAX
+                gen->pop("rbx");                   // Pop divisor into RBX
+                gen->m_output << "    cqo\n";      // Sign-extend RAX into RDX:RAX for division
+                gen->m_output << "    idiv rbx\n"; // Perform signed division
+                gen->push("rdx");                  // Push remainder (modulus result) onto the stack
+            }
+        };
+        binary_expr_visitor visitor{.gen = this};
+        std::visit(visitor, bin_expr->var);
+    }
+
+    void generate_term(const node_term *term) {
+        struct term_visitor {
+            generator *gen;
+
+            void operator()(const node_term_int_lit *term_int_lit) const {
+                // Move the integer value into register RAX (used for syscall arguments and computation)
+                gen->m_output << "    mov rax, " << term_int_lit->int_lit.value.value() << "\n";
+                // Push RAX onto the stack to store the computed value
+                gen->push("rax");
+            }
+            void operator()(const node_term_identifier *term_ident) const {
+                // Ensure the variable has been declared before using it
+                auto it = std::find_if(gen->m_variables.cbegin(), gen->m_variables.cend(), [&](const variable &var) {
+                    return var.name == term_ident->identifier.value.value();
+                });
+                if (it == gen->m_variables.cend()) {
+                    std::cerr << "Error: Undeclared Identifier " << term_ident->identifier.value.value() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                // Retrieve the variable's stack location
+                const auto &var = (*it);
+
+                // Corrected offset calculation
+                std::stringstream offset;
+                offset << "QWORD [rsp + " << ((gen->m_stack_size - (*it).stack_loc - 1) * 8)
+                       << "]"; // No subtraction from stack size
+                // Push the variable onto the stack
+                gen->push(offset.str());
+            }
+
+            void operator()(const node_term_parentheses *term_paren) const {
+                gen->generate_expr(term_paren->expr);
+            }
+        };
+        term_visitor visitor{.gen = this};
+        std::visit(visitor, term->var);
+    }
+
+    // ============================= EXPRESSION GENERATION =============================
+
+    // Function to generate assembly code for an expression
+    void generate_expr(const node_expr *expr) {
+        // Define a visitor struct to handle different expression types
+        struct expr_visitor {
+            generator *gen; // Pointer to the generator instance
+
+            void operator()(const node_term *term) const {
+                gen->generate_term(term);
+            }
+
+            // Handles binary expressions (e.g., addition, multiplication)
+            void operator()(const node_binary_expr *bin_expr) const {
+                gen->generate_binary_expr(bin_expr);
+            }
+        };
+
+        expr_visitor visitor{.gen = this}; // Create a visitor instance
+        std::visit(visitor, expr->var);    // Apply visitor pattern to handle the expression
+    }
+
+    // ============================= STATEMENT GENERATION =============================
+
+    void generate_scope(const node_scope *scope) {
+        begin_scope();
+        for (const node_statement *stmt : scope->stmts) {
+            generate_statement(*stmt);
+        }
+        end_scope();
+    }
+
+    // Function to generate assembly code for a statement
+    void generate_statement(const node_statement &stmt) {
+        // Define a visitor struct to handle different statement types
+        struct statement_visitor {
+            generator *gen; // Pointer to the generator instance
+
+            // Handles exit statements (e.g., exit(5);)
+            void operator()(const node_statement_exit &stmt_exit) {
+                // Generate code for the expression inside exit()
+                gen->generate_expr(stmt_exit.expr);
+                // Move the syscall number for exit (60) into RAX
+                gen->m_output << "    mov rax, 60\n";
+                // Pop the expression result from the stack into RDI (exit code argument for syscall)
+                gen->pop("rdi");
+                // Execute the syscall to terminate the program
+                gen->m_output << "    syscall\n";
+            }
+
+            // Handles let statements (e.g., let x = 5;)
+            void operator()(const node_statement_let &stmt_let) {
+                // Ensure the variable is not already declared
+                auto it = std::find_if(gen->m_variables.cbegin(), gen->m_variables.cend(),
+                                       [&](const variable &var) { return var.name == stmt_let.ident.value.value(); });
+                if (it != gen->m_variables.cend()) {
+                    std::cerr << "Error: Identifier already exists: " << stmt_let.ident.value.value() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                // Store the variable in the symbol table with its stack location
+                gen->m_variables.push_back({.name = stmt_let.ident.value.value(), .stack_loc = gen->m_stack_size});
+
+                // Generate code for the assigned expression
+                gen->generate_expr(stmt_let.expr);
+            }
+
+            void operator()(const node_scope *scope) const {
+                gen->generate_scope(scope);
+            }
+
+            void operator()(const node_statement_if *stmt_if) {
+                gen->generate_expr(stmt_if->expr);
+                gen->pop("rax");
+                std::string label = gen->create_label();
+                gen->m_output << "    test rax, rax\n";
+                gen->m_output << "    jz " << label << "\n";
+                gen->generate_scope(stmt_if->scope);
+                gen->m_output << label << ":\n";
+            }
+        };
+
+        statement_visitor visitor{.gen = this}; // Create a visitor instance
+        std::visit(visitor, stmt.var);          // Apply visitor pattern to handle the statement
+    }
+
+    // ============================= PROGRAM GENERATION =============================
+
+    // Function to generate assembly code for the entire program
+    std::string generate_program() {
+        std::stringstream output; // String stream to store generated assembly code
+
+        // Start of the assembly program
+        m_output << "global _start\n"; // Declares the _start entry point for the assembler
+        m_output << "_start:\n";       // Defines the _start label
+
+        // Generate assembly for each statement in the program
+        for (const node_statement &stmt : m_prog.stmts) {
+            generate_statement(stmt);
+        }
+
+        // Ensure the program exits cleanly in case there is no exit() statement
+        m_output << "    mov rax, 60\n"; // Move syscall number for exit into RAX
+        m_output << "    mov rdi, 0\n";  // Set exit status to 0 (successful termination)
+        m_output << "    syscall\n";     // Call the exit syscall
+
+        return m_output.str(); // Return the generated assembly code as a string
+    }
+
+  private:
+    // Pushes a value onto the stack and updates the stack size
+    void push(const std::string &reg) {
+        m_output << "    push " << reg << "\n";
+        m_stack_size++;
+    }
+
+    // Pops a value from the stack and updates the stack size
+    void pop(const std::string &reg) {
+        m_output << "    pop " << reg << "\n";
+        m_stack_size--;
+    }
+
+    void begin_scope() {
+        m_scopes.push_back(m_variables.size());
+    }
+
+    void end_scope() {
+        size_t pop_count = m_variables.size() - m_scopes.back();
+        m_output << "    add rsp, " << pop_count * 8 << "\n"; // add becasue stack grows from top
+        m_stack_size -= pop_count;
+
+        for (int i = 0; i < pop_count; ++i) {
+            m_variables.pop_back();
+        }
+        m_scopes.pop_back();
+    }
+
+    std::string create_label() {
+        return "label" + std::to_string(m_label_count);
+    }
+
+    // Structure representing a variable in the symbol table
+    struct variable {
+        std::string name;
+        size_t stack_loc; // Stack position of the variable
+    };
+
+    const node_program m_prog;           // Stores the parsed program (AST)
+    std::stringstream m_output;          // Used to construct the assembly output
+    size_t m_stack_size = 0;             // Tracks the current stack size
+    std::vector<variable> m_variables{}; // Symbol table for variable storage
+    std::vector<size_t> m_scopes{};      // stores the scopes
+    int m_label_count = 0;               // stores number of labels
+};
+
+

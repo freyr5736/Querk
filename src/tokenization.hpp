@@ -7,7 +7,24 @@
 #include <cctype>
 
 // Enum representing different types of tokens
-enum class tokentype { exit, int_lit, semi, open_paren, close_paren, ident, let, equals, plus, star, minus, div, modu };
+enum class tokentype {
+    exit,
+    int_lit,
+    semi,
+    open_paren,
+    close_paren,
+    ident,
+    let,
+    equals,
+    plus,
+    star,
+    minus,
+    div,
+    modu,
+    open_curly,
+    close_curly,
+    if_
+};
 
 // Token structure representing a token with its type and optional value
 struct token {
@@ -38,112 +55,6 @@ class tokenizer {
     {}
 
     // Function to tokenize the input source code
-    // with if-else statements
-    // inline std::vector<token> tokenize() {
-    //     std::string tkn;           // Stores characters of the current token
-    //     std::vector<token> tokens; // Stores all parsed tokens
-
-    //     // Loop while there are characters to process
-    //     while (peek().has_value()) {
-    //         if (std::isalpha(peek().value())) { // Check if character is alphabetic
-    //             tkn.push_back(consume());       // Append character and advance position
-
-    //             // Continue consuming alphanumeric characters (identifiers or keywords)
-    //             while (peek().has_value() && std::isalnum(peek().value())) {
-    //                 tkn.push_back(consume());
-    //             }
-
-    //             // Check for keywords
-    //             if (tkn == "exit") {
-    //                 tokens.push_back({.type = tokentype::exit}); // Store 'exit' keyword token
-    //                 tkn.clear();
-    //             } else if (tkn == "let") {
-    //                 tokens.push_back({.type = tokentype::let}); // Store 'let' keyword token
-    //                 tkn.clear();
-    //             } else {
-    //                 // Store identifier token
-    //                 tokens.push_back({.type = tokentype::ident, .value = tkn});
-    //                 tkn.clear();
-    //             }
-    //         } else if (std::isdigit(peek().value())) { // Check if character is a digit (integer literal)
-    //             tkn.push_back(consume());
-
-    //             // Continue consuming numeric characters
-    //             while (peek().has_value() && std::isdigit(peek().value())) {
-    //                 tkn.push_back(consume());
-    //             }
-
-    //             tokens.push_back({.type = tokentype::int_lit, .value = tkn}); // Store integer literal token
-    //             tkn.clear();
-    //         }
-
-    //         // Check for parentheses ( ) and store them as tokens
-    //         else if (peek().value() == ')') {
-    //             consume();
-    //             tokens.push_back({.type = tokentype::close_paren});
-    //         } else if (peek().value() == '(') {
-    //             consume();
-    //             tokens.push_back({.type = tokentype::open_paren});
-    //         }
-
-    //         // Check for semicolon (;)
-    //         else if (peek().value() == ';') {
-    //             consume();                                   // Consume semicolon character
-    //             tokens.push_back({.type = tokentype::semi}); // Store semicolon token
-    //         }
-
-    //         // Check for equals (=)
-    //         else if (peek().value() == '=') {
-    //             consume();                                     // Consume equals character
-    //             tokens.push_back({.type = tokentype::equals}); // Store equals token
-    //         }
-
-    //         // Check for plus (+)
-    //         else if (peek().value() == '+') {
-    //             consume();                                   // Consume plus character
-    //             tokens.push_back({.type = tokentype::plus}); // Store plus token
-    //         }
-
-    //         // Check for astrisk (*)
-    //         else if (peek().value() == '*') {
-    //             consume();                                   // Consume astrisk character
-    //             tokens.push_back({.type = tokentype::star}); // Store astrisk token
-    //         }
-
-    //         // Check for astrisk (-)
-    //         else if (peek().value() == '-') {
-    //             consume();                                    // Consume minus character
-    //             tokens.push_back({.type = tokentype::minus}); // Store minus token
-    //         }
-
-    //         // Check for astrisk (/)
-    //         else if (peek().value() == '/') {
-    //             consume();                                  // Consume slash character
-    //             tokens.push_back({.type = tokentype::div}); // Store slash token
-    //         }
-
-    //          //Check for modu (%)
-    //         else if (peek().value() == '%') {
-    //             consume();                                    // Consume modulo character
-    //             tokens.push_back({.type = tokentype::modu}); // Store modulo token
-    //         }
-
-    //         // Ignore whitespace (spaces, newlines, tabs)
-    //         else if (std::isspace(peek().value())) {
-    //             consume();
-    //         }
-
-    //         // Unrecognized character error
-    //         else {
-    //             std::cerr << "Error: Unrecognized character '" << peek().value() << "'" << std::endl;
-    //             exit(EXIT_FAILURE);
-    //         }
-    //     }
-
-    //     return tokens; // Return the list of parsed tokens
-    // }
-
-    // Function to tokenize the input source code
     inline std::vector<token> tokenize() {
         std::string tkn;           // Stores characters of the current token
         std::vector<token> tokens; // Stores all parsed tokens
@@ -163,7 +74,12 @@ class tokenizer {
                 // Check for keywords
                 if (tkn == "exit" || tkn == "let") {
                     tokens.push_back({.type = (tkn == "exit") ? tokentype::exit : tokentype::let});
-                } else {
+                } else if (tkn == "if") {
+                    tokens.push_back({.type = tokentype::if_});
+                    tkn.clear();
+                }
+
+                else {
                     tokens.push_back({.type = tokentype::ident, .value = tkn});
                 }
                 tkn.clear();
@@ -206,6 +122,14 @@ class tokenizer {
             case '%':
                 consume();
                 tokens.push_back({.type = tokentype::modu});
+                break;
+            case '{':
+                consume();
+                tokens.push_back({.type = tokentype::open_curly});
+                break;
+            case '}':
+                consume();
+                tokens.push_back({.type = tokentype::close_curly});
                 break;
             default:
                 if (std::isdigit(current)) {

@@ -68,7 +68,11 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "format": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "__bit_reference": "cpp",
+        "__functional_base": "cpp",
+        "__memory": "cpp",
+        "filesystem": "cpp"
     },
     "cmake.sourceDirectory": "/home/freyr5736/coding/querk/src",
     "C_Cpp.default.cppStandard": "c++20"

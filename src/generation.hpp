@@ -1,9 +1,10 @@
 #pragma once // Ensures this header file is only included once during compilation
 
-#include "parser.hpp"    // Includes the parser, which provides the AST (Abstract Syntax Tree)
-#include <sstream>       // Used to construct the output assembly as a string
-#include <unordered_map> // Used for storing variables and their stack locations
+#include "parser.hpp" // Includes the parser, which provides the AST (Abstract Syntax Tree)
+#include <sstream>    // Used to construct the output assembly as a string
+#include <vector>     // Used for storing variables and their stack locations
 #include <assert.h>
+#include <algorithm>
 
 // ============================= CODE GENERATOR CLASS =============================
 
@@ -78,16 +79,19 @@ class generator {
             }
             void operator()(const node_term_identifier *term_ident) const {
                 // Ensure the variable has been declared before using it
-                if (!gen->m_variables.contains(term_ident->identifier.value.value())) {
+                auto it = std::find_if(gen->m_variables.cbegin(), gen->m_variables.cend(), [&](const variable &var) {
+                    return var.name == term_ident->identifier.value.value();
+                });
+                if (it == gen->m_variables.cend()) {
                     std::cerr << "Error: Undeclared Identifier " << term_ident->identifier.value.value() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 // Retrieve the variable's stack location
-                const auto &var = gen->m_variables.at(term_ident->identifier.value.value());
+                const auto &var = (*it);
 
                 // Corrected offset calculation
                 std::stringstream offset;
-                offset << "QWORD [rsp + " << ((gen->m_stack_size - var.stack_loc - 1) * 8)
+                offset << "QWORD [rsp + " << ((gen->m_stack_size - (*it).stack_loc - 1) * 8)
                        << "]"; // No subtraction from stack size
                 // Push the variable onto the stack
                 gen->push(offset.str());
@@ -97,7 +101,7 @@ class generator {
                 gen->generate_expr(term_paren->expr);
             }
         };
-        term_visitor visitor({.gen = this});
+        term_visitor visitor{.gen = this};
         std::visit(visitor, term->var);
     }
 
@@ -114,7 +118,7 @@ class generator {
             }
 
             // Handles binary expressions (e.g., addition, multiplication)
-            void operator()(const node_binary_expr *bin_expr) {
+            void operator()(const node_binary_expr *bin_expr) const {
                 gen->generate_binary_expr(bin_expr);
             }
         };
@@ -124,6 +128,14 @@ class generator {
     }
 
     // ============================= STATEMENT GENERATION =============================
+
+    void generate_scope(const node_scope *scope) {
+        begin_scope();
+        for (const node_statement *stmt : scope->stmts) {
+            generate_statement(*stmt);
+        }
+        end_scope();
+    }
 
     // Function to generate assembly code for a statement
     void generate_statement(const node_statement &stmt) {
@@ -146,16 +158,31 @@ class generator {
             // Handles let statements (e.g., let x = 5;)
             void operator()(const node_statement_let &stmt_let) {
                 // Ensure the variable is not already declared
-                if (gen->m_variables.contains(stmt_let.ident.value.value())) {
+                auto it = std::find_if(gen->m_variables.cbegin(), gen->m_variables.cend(),
+                                       [&](const variable &var) { return var.name == stmt_let.ident.value.value(); });
+                if (it != gen->m_variables.cend()) {
                     std::cerr << "Error: Identifier already exists: " << stmt_let.ident.value.value() << std::endl;
                     exit(EXIT_FAILURE);
                 }
                 // Store the variable in the symbol table with its stack location
-                auto var = variable{.stack_loc = gen->m_stack_size};
-                gen->m_variables.insert({stmt_let.ident.value.value(), var});
+                gen->m_variables.push_back({.name = stmt_let.ident.value.value(), .stack_loc = gen->m_stack_size});
 
                 // Generate code for the assigned expression
                 gen->generate_expr(stmt_let.expr);
+            }
+
+            void operator()(const node_scope *scope) const {
+                gen->generate_scope(scope);
+            }
+
+            void operator()(const node_statement_if *stmt_if) {
+                gen->generate_expr(stmt_if->expr);
+                gen->pop("rax");
+                std::string label = gen->create_label();
+                gen->m_output << "    test rax, rax\n";
+                gen->m_output << "    jz " << label << "\n";
+                gen->generate_scope(stmt_if->scope);
+                gen->m_output << label << ":\n";
             }
         };
 
@@ -199,13 +226,35 @@ class generator {
         m_stack_size--;
     }
 
+    void begin_scope() {
+        m_scopes.push_back(m_variables.size());
+    }
+
+    void end_scope() {
+        size_t pop_count = m_variables.size() - m_scopes.back();
+        m_output << "    add rsp, " << pop_count * 8 << "\n"; // add becasue stack grows from top
+        m_stack_size -= pop_count;
+
+        for (int i = 0; i < pop_count; ++i) {
+            m_variables.pop_back();
+        }
+        m_scopes.pop_back();
+    }
+
+    std::string create_label() {
+        return "label" + std::to_string(m_label_count);
+    }
+
     // Structure representing a variable in the symbol table
     struct variable {
+        std::string name;
         size_t stack_loc; // Stack position of the variable
     };
 
-    const node_program m_prog;                               // Stores the parsed program (AST)
-    std::stringstream m_output;                              // Used to construct the assembly output
-    size_t m_stack_size = 0;                                 // Tracks the current stack size
-    std::unordered_map<std::string, variable> m_variables{}; // Symbol table for variable storage
+    const node_program m_prog;           // Stores the parsed program (AST)
+    std::stringstream m_output;          // Used to construct the assembly output
+    size_t m_stack_size = 0;             // Tracks the current stack size
+    std::vector<variable> m_variables{}; // Symbol table for variable storage
+    std::vector<size_t> m_scopes{};      // stores the scopes
+    int m_label_count = 0;               // stores number of labels
 };

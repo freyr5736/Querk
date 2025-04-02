@@ -98,11 +98,22 @@ struct node_statement_let {
     node_expr *expr; // Stores the assigned expression (5 in let x = 5;)
 };
 
+struct node_statement;
+
+struct node_scope {
+    std::vector<node_statement *> stmts;
+};
+
+struct node_statement_if {
+    node_expr *expr;
+    node_scope *scope;
+};
+
 // A node_statement can be one of the following:
 // 1. node_statement_exit (for exit() statements)
 // 2. node_statement_let (for let statements)
 struct node_statement {
-    std::variant<node_statement_exit, node_statement_let> var;
+    std::variant<node_statement_exit, node_statement_let, node_scope *, node_statement_if *> var;
 };
 
 // Structure representing a complete program containing multiple statements
@@ -147,7 +158,7 @@ class parser {
         } else if (auto open_paren = try_consume(tokentype::open_paren)) {
             auto expr = parse_expr();
             if (!expr.has_value()) {
-                std::cerr << "Error: Expectec expression" << std::endl;
+                std::cerr << "Error: Expected expression" << std::endl;
                 exit(EXIT_FAILURE);
             }
             try_consume(tokentype::close_paren, "Error: Expected ')'");
@@ -176,7 +187,7 @@ class parser {
             std::optional<int> prec;
             if (curr_tkn.has_value()) {
                 prec = binary_precedence(curr_tkn->type);
-                if (!prec.has_value() || prec < min_prec) {
+                if (!prec.has_value() || prec.value() < min_prec) {
                     break;
                 }
             } else {
@@ -186,7 +197,7 @@ class parser {
             int v_next_min_prec = prec.value() + 1;
             auto expr_rhs = parse_expr(v_next_min_prec);
             if (!expr_rhs.has_value()) {
-                std::cerr << "Eroor: Unable to parse expression" << std::endl;
+                std::cerr << "Error: Unable to parse expression" << std::endl;
                 exit(EXIT_FAILURE);
             }
 
@@ -231,7 +242,19 @@ class parser {
         return expr_lhs;
     }
 
-    std::optional<node_statement> parse_statement() {
+    std::optional<node_scope *> parse_scope() {
+        if (!try_consume(tokentype::open_curly).has_value()) {
+            return {};
+        }
+        auto scope = m_allocator.alloc<node_scope>();
+        while (auto stmt = parse_statement()) {
+            scope->stmts.push_back(stmt.value());
+        }
+        try_consume(tokentype::close_curly, "Error: Expected '}'");
+        return scope;
+    }
+
+    std::optional<node_statement *> parse_statement() {
         if (peek().has_value() && peek().value().type == tokentype::exit) {
             try_consume(tokentype::exit, "Error: Expected 'exit' keyword");
             try_consume(tokentype::open_paren, "Error: Expected '(' after 'exit'");
@@ -245,7 +268,9 @@ class parser {
             }
             try_consume(tokentype::close_paren, "Error: Expected ')' after expression in 'exit()'");
             try_consume(tokentype::semi, "Error: Missing semicolon after 'exit()'");
-            return node_statement{*stmt_exit};
+            auto stmt = m_allocator.alloc<node_statement>();
+            stmt->var = *stmt_exit;
+            return stmt;
         }
 
         // Handle let statements
@@ -265,7 +290,38 @@ class parser {
             }
 
             try_consume(tokentype::semi, "Error: Missing semicolon after 'let' statement");
-            return node_statement{*stmt_let};
+            auto stmt = m_allocator.alloc<node_statement>();
+            stmt->var = *stmt_let;
+            return stmt;
+        } else if (peek().has_value() && peek().value().type == tokentype::open_curly) {
+            if (auto scope = parse_scope()) {
+                auto stmt = m_allocator.alloc<node_statement>();
+                stmt->var = scope.value();
+                return stmt;
+            } else {
+                std::cerr << "Error: Invalid scope" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+        } else if (auto if_ = try_consume(tokentype::if_)) {
+            try_consume(tokentype::open_paren, "Error: Expected'('");
+            auto stmt_if = m_allocator.alloc<node_statement_if>();
+            if (auto expr = parse_expr()) {
+                stmt_if->expr = expr.value();
+            } else {
+                std::cerr << "Error: Invalid expression in 'let' statement" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(tokentype::close_paren, "Error: Expected')'");
+            if (auto scope = parse_scope()) {
+                stmt_if->scope = scope.value();
+            } else {
+                std::cerr << "Error: Invalid scope" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            auto stmt = m_allocator.alloc<node_statement>();
+            stmt->var = stmt_if;
+            return stmt;
         }
 
         return {};
@@ -275,7 +331,7 @@ class parser {
         auto prog = m_allocator.alloc<node_program>();
         while (peek().has_value()) {
             if (auto stmt = parse_statement()) {
-                prog->stmts.push_back(stmt.value());
+                prog->stmts.push_back(*stmt.value());
             } else {
                 std::cerr << "Error: Invalid statement in program" << std::endl;
                 exit(EXIT_FAILURE);
