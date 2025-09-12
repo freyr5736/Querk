@@ -1,15 +1,6 @@
 /*
     Harded coded (very manually coded)
-    take an input file -> read it -> extract contents -> extract tokens -> save tokens in a vector -> write assembly ->
-    -> make .asm file -> generate executable file
-
-    To Run :
-        => first rename the file to main.cpp (or as mentioned in CMakeLists.txt)
-
-        make # build
-        ./querk ../input.qrk # run with input file
-        ./out # running executable
-        echo $? # checking output
+    take an input file -> read it -> extract contents -> extract tokens -> save tokens in a vector -> write assembly -> make .asm file -> generate executable file
 
 */
 
