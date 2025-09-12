@@ -1,5 +1,7 @@
 let x = 1;
-if (x){
+let y = 0;
+// comment
+if (y){
     exit (20);
 }
 exit (10);

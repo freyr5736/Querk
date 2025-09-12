@@ -2,6 +2,8 @@ global _start
 _start:
     mov rax, 1
     push rax
+    mov rax, 0
+    push rax
     push QWORD [rsp + 0]
     pop rax
     test rax, rax

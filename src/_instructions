@@ -1,10 +1,7 @@
     To Run :
-        cmake -S . -B build         # to create the build directory
+        cmake -S . -B build         # create the build directory
         cd build                    # go inside the build directory
-        make                        # building the code (compiling)
-        ./querk ../_input.qrk       # run with input file (compiling input file)
-        ./out                       # running executable
-        echo $?                     # checking output
-
-        
-=> first rename the file to main.cpp (or as mentioned in CMakeLists.txt)
+        make                        # build the code (compiling)
+        ./querk ../_input.qrk       # run the input file (compiling input file)
+        ./out                       # run the executable
+        echo $?                     # check output
