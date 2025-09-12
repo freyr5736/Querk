@@ -2,7 +2,7 @@
         cmake -S . -B build         # to create the build directory
         cd build                    # go inside the build directory
         make                        # building the code (compiling)
-        ./querk ../input.qrk        # run with input file (compiling input file)
+        ./querk ../_input.qrk       # run with input file (compiling input file)
         ./out                       # running executable
         echo $?                     # checking output
 
