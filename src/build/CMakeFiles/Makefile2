@@ -54,10 +54,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/freyr5736/coding/querk/src
+CMAKE_SOURCE_DIR = /home/freyr5736/coding/Querk/src
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/freyr5736/coding/querk/src/build
+CMAKE_BINARY_DIR = /home/freyr5736/coding/Querk/src/build
 
 #=============================================================================
 # Directory level rules for the build root directory
@@ -81,14 +81,14 @@ clean: CMakeFiles/querk.dir/clean
 CMakeFiles/querk.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/querk.dir/build.make CMakeFiles/querk.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/querk.dir/build.make CMakeFiles/querk.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/freyr5736/coding/querk/src/build/CMakeFiles --progress-num=1,2 "Built target querk"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/freyr5736/coding/Querk/src/build/CMakeFiles --progress-num=1,2 "Built target querk"
 .PHONY : CMakeFiles/querk.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/querk.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/freyr5736/coding/querk/src/build/CMakeFiles 2
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/freyr5736/coding/Querk/src/build/CMakeFiles 2
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/querk.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/freyr5736/coding/querk/src/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/freyr5736/coding/Querk/src/build/CMakeFiles 0
 .PHONY : CMakeFiles/querk.dir/rule
 
 # Convenience name for target.

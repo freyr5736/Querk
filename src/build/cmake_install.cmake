@@ -1,4 +1,4 @@
-# Install script for directory: /home/freyr5736/coding/querk/src
+# Install script for directory: /home/freyr5736/coding/Querk/src
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/freyr5736/coding/querk/src/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/freyr5736/coding/Querk/src/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

@@ -8,7 +8,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/freyr5736/coding/querk/src/main.cpp" "CMakeFiles/querk.dir/main.cpp.o" "gcc" "CMakeFiles/querk.dir/main.cpp.o.d"
+  "/home/freyr5736/coding/Querk/src/main.cpp" "CMakeFiles/querk.dir/main.cpp.o" "gcc" "CMakeFiles/querk.dir/main.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.
