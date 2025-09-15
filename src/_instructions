@@ -5,3 +5,4 @@
         ./querk ../_input.qrk       # run the input file (compiling input file)
         ./out                       # run the executable
         echo $?                     # check output
+        

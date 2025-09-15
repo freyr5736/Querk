@@ -73,6 +73,22 @@ class tokenizer {
                 continue;
             }
 
+            if (peek().value() == '/' && peek(1).has_value() && peek(1).value() == '*') {
+                while (peek().has_value()) {
+                    if(peek().value() == '*' && peek(1).has_value() && peek(1).value()=='/'){
+                        break;
+                    }
+                    consume();
+                }
+                if(peek().has_value()){
+                    consume();
+                }
+                if(peek().has_value()){
+                    consume();
+                }
+                continue;
+            }
+
             // For words
             char current = peek().value();
             if (std::isalpha(current)) { // Check if character is alphabetic

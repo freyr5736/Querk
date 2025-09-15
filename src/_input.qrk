@@ -1,7 +1,14 @@
 let x = 1;
 let y = 0;
-// comment
-if (y){
-    exit (20);
+
+/*
+if (x){ 
+    exit (10);
 }
-exit (10);
+*/
+
+//exit (20);
+
+exit (30);
+
+                 
