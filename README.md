@@ -2,15 +2,15 @@
 
 **Querk** is a single-pass custom compiler built as a learning project to explore low-level concepts and compiler design. The primary goal of this project is to understand how compilers work internally from parsing and semantic analysis to code generation using modern C++.
 
-This project combines **theoretical compiler concepts** with **practical C++ implementation**, focusing on clarity and experimentation rather than production readiness.
+This project combines theoretical compiler concepts with practical C++ implementation, focusing on clarity and experimentation rather than production readiness.
 
 ---
 
 ## Overview
 
-Querk follows a **single-pass compilation model** and is structured around an **Abstract Syntax Tree (AST)**. The compiler parses input, builds semantic meaning through AST nodes, and generates **NASM assembly**, which is currently hardcoded to keep the focus on learning core compiler mechanics.
+Querk follows a single-pass compilation model and is structured around an Abstract Syntax Tree (AST). The compiler parses input, builds semantic meaning through AST nodes, and generates NASM assembly, which is currently hardcoded to keep the focus on learning core compiler mechanics.
 
-While the foundation of this project was inspired by a YouTube tutorial by Pixeled, it has been **extended and modified** with custom features and design choices to deepen understanding and experimentation.
+While the foundation of this project was inspired by a YouTube tutorial by Pixeled, it has been extended and modified with custom features and design choices to deepen understanding and experimentation.
 
 > **Note:** This project is still under active development. Features are added incrementally as learning progresses.
 
