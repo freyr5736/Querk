@@ -1,6 +1,6 @@
 # Querk
 
-**Querk** is a single-pass custom compiler built as a learning project to explore low-level concepts and compiler design. The primary goal of this project is to understand how compilers work internally—from parsing and semantic analysis to code generation—using modern C++.
+**Querk** is a single-pass custom compiler built as a learning project to explore low-level concepts and compiler design. The primary goal of this project is to understand how compilers work internally from parsing and semantic analysis to code generation using modern C++.
 
 This project combines **theoretical compiler concepts** with **practical C++ implementation**, focusing on clarity and experimentation rather than production readiness.
 
